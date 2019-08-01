@@ -1,4 +1,6 @@
 
+/* Requires C11 (for anonymous struct / union members) */
+
 #ifndef KJSON_H
 #define KJSON_H
 

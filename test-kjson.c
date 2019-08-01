@@ -1,5 +1,6 @@
 
-/* Requires _POSIX_C_SOURCE >= 200809L */
+/* Requires C11 (for anonymous struct / union members)
+ * and      _POSIX_C_SOURCE >= 200809L */
 
 #include <stdio.h>	/* FILE, getline(3) */
 #include <assert.h>	/* assert(3) */

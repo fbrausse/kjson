@@ -1,5 +1,5 @@
 
-/* Requires C99 */
+/* Requires C11 (for anonymous struct / union members) */
 
 #include <string.h>	/* strncmp(3), strchr(3) */
 #include <stdlib.h>	/* strtod(3), malloc(3), free(3) */
