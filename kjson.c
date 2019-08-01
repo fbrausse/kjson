@@ -414,15 +414,14 @@ bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c)
 		 * not ',' if and only if this is the end of the composite.
 		 * Close all such composites. */
 		if (!ao_fst)
-			while (depth && *p->s != ',') {
+			while (depth && (skip_space(p), *p->s != ',')) {
 				switch (*p->s) {
 				case ']': c->end(c, true); break;
 				case '}': c->end(c, false); break;
 				default: return false;
 				}
 				p->s++;
-				if (--depth)
-					skip_space(p);
+				depth--;
 				known_in_arr = false;
 			}
 
