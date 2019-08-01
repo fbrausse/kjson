@@ -2,7 +2,6 @@
 /* Requires C99 */
 
 #include <string.h>	/* strncmp(3), strchr(3) */
-#include <ctype.h>	/* iscntrl(3) */
 #include <stdlib.h>	/* strtod(3), malloc(3), free(3) */
 #include <inttypes.h>	/* strtoumax(3), uint_least32_t, PRIdMAX */
 #include <errno.h>	/* errno(3) */
@@ -181,14 +180,14 @@ bool kjson_read_string_utf8(struct kjson_parser *p, char **begin, size_t *len)
 	for (;; p->s++) {
 		if (*p->s == '"' || *p->s == '\\')
 			goto escape;
-		if (iscntrl(*p->s))
+		if ((unsigned char)*p->s <= 0x1f)
 			return false;
 #else
 	/* slow search until pointer is aligned */
 	for (; (uintptr_t)p->s % sizeof(unsigned long); p->s++) {
 		if (*p->s == '"' || *p->s == '\\')
 			goto escape;
-		if (iscntrl(*p->s))
+		if ((unsigned char)*p->s <= 0x1f)
 			return false;
 	}
 	/* search sizeof(unsigned long) bytes at a time -- trick from
@@ -197,8 +196,7 @@ bool kjson_read_string_utf8(struct kjson_parser *p, char **begin, size_t *len)
 	     p->s += sizeof(unsigned long)) {
 		/* x_i < 0x20 -> false
 		 * '"' = 0x22 -> end / break
-		 * '\\' = 0x5c -> escape
-		 * DEL = 0x7f -> false */
+		 * '\\' = 0x5c -> escape */
 		unsigned long x = *(unsigned long *)p->s;
 		unsigned long a = x ^ UL_REPEATED8('"');
 		unsigned long b = x ^ UL_REPEATED8('\\');
@@ -216,7 +214,7 @@ escape:
 	/* even slower search, replacing escapes (they're always shorter than
 	 * the escape sequence itself) */
 	while (*p->s != '"') {
-		if (iscntrl(*p->s))
+		if ((unsigned char)*p->s <= 0x1f)
 			return false;
 		if (*p->s == '\\') {
 			p->s++;
@@ -398,14 +396,14 @@ bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
 				case '}': c->o_end(c); break;
 				default: return false;
 				}
-				depth--;
 				p->s++;
+				if (--depth)
+					skip_space(p);
 				known_in_arr = false;
 			}
 		if (!depth)
 			return true;
 		if (!ao_fst) {
-			skip_space(p);
 			if (*p->s != ',')
 				return false;
 			p->s++;
