@@ -29,15 +29,26 @@ struct kjson_string {
 	size_t len;
 };
 
-/* low-level interface (no composite values, no allocations) */
+/* --------------------------------------------------------------------------
+ * low-level interface (no composite values, no allocations)
+ * -------------------------------------------------------------------------- */
 
 bool kjson_read_bool(struct kjson_parser *p, bool *v);
 bool kjson_read_null(struct kjson_parser *p);
-bool kjson_read_string_utf8(struct kjson_parser *p, char **begin, size_t *len);
 bool kjson_read_integer(struct kjson_parser *p, intmax_t *v);
 void kjson_read_double(struct kjson_parser *p, double *v);
 
-/* mid-level interface (callback-based streaming parser, no allocations) */
+/* Parses a JSON string entry into a '\0'-terminated UTF-8 string at *begin,
+ * decoding any escaped characters (including surrogate pairs). len is optional
+ * and, if non-NULL, on success will contain the length of the string.
+ * On success, *begin will point into the original source, i.e., the source
+ * string will be overwritten.
+ */
+bool kjson_read_string_utf8(struct kjson_parser *p, char **begin, size_t *len);
+
+/* --------------------------------------------------------------------------
+ * mid-level interface (callback-based parser, no allocations)
+ * -------------------------------------------------------------------------- */
 
 enum kjson_leaf_type {
 	KJSON_LEAF_NULL           = KJSON_VALUE_NULL,
@@ -55,23 +66,41 @@ union kjson_leaf_raw {
 };
 
 struct kjson_mid_cb {
+	/* Called whenever a null-, boolean, numeric or string value is
+	 * encountered, with the appropriate values set in 'type' and '*l'. */
 	void (*leaf   )(struct kjson_mid_cb *c, enum kjson_leaf_type type,
 	                union kjson_leaf_raw *l);
+
+	/* Called when an array value is encountered, i.e. on parsing '['. */
 	void (*a_begin)(struct kjson_mid_cb *c);
+
+	/* Called just before an array entry is parsed. */
 	void (*a_entry)(struct kjson_mid_cb *c);
+
+	/* Called at the end of an array value, i.e. on parsing ']'. */
 	void (*a_end  )(struct kjson_mid_cb *c);
+
+	/* Called when an object value is encountered, i.e. on parsing '{'. */
 	void (*o_begin)(struct kjson_mid_cb *c);
+
+	/* Called when an object entry is parsed, with *key containing a pointer
+	 * to the key of the entry. */
 	void (*o_key  )(struct kjson_mid_cb *c, struct kjson_string *key);
+
+	/* Called at the end of an object value, i.e. on parsing '}'. */
 	void (*o_end  )(struct kjson_mid_cb *c);
 };
 
 /* requires stack space linear in the depth of the document */
 bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c);
+
 /* requires only constant stack space, on my laptop same speed or a bit faster
  * than kjson_parse_mid_rec() */
 bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c);
 
-/* high-level interface (dynamically build tree structure) */
+/* --------------------------------------------------------------------------
+ * high-level interface (dynamically build tree structure)
+ * -------------------------------------------------------------------------- */
 
 struct kjson_object_entry;
 

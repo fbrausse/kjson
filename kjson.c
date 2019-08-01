@@ -75,6 +75,7 @@ void kjson_read_double(struct kjson_parser *p, double *v)
 		*v = 0;
 }
 
+/* Converts the hex-string u[0..3] to a 16-bit value and stores it in *uni. */
 static bool hex4(unsigned *uni, const char *u)
 {
 	*uni = 0;
@@ -98,6 +99,11 @@ static bool hex4(unsigned *uni, const char *u)
 static const char str_subst1[] = "\"\\/\b\f\n\r\t";
 static const char str_pat   [] = "\"\\/bfnrtu";
 
+/* Decodes escape sequence(s) at p->s into *r and advances both, p->s and *r
+ * to reflect the amount read and written, respectively. p->s and *r are
+ * assumed to point to UTF-8 strings, in which case escaped(r, p) is just
+ * appending the corresponding JSON-escaped code-point to *r. See README.md
+ * for details. */
 static bool escaped(char **r, struct kjson_parser *p)
 {
 	const char *at = strchr(str_pat, *p->s);
@@ -162,12 +168,6 @@ static bool escaped(char **r, struct kjson_parser *p)
 # endif
 #endif
 
-/* Parses a JSON string entry into a '\0'-terminated UTF-8 string at *begin,
- * decoding any escaped characters (including surrogate pairs). len is optional
- * and, if non-NULL, on success will contain the length of the string.
- * On success, *begin will point into the original source, i.e., the source
- * string will be overwritten.
- */
 bool kjson_read_string_utf8(struct kjson_parser *p, char **begin, size_t *len)
 {
 	if (*p->s != '"')
@@ -294,7 +294,7 @@ static int kjson_parse_leaf(struct kjson_parser *p, union kjson_leaf_raw *leaf)
 bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 {
 	if (*p->s == '[') {
-		p->s++;
+		p->s++; /* skip '[' */
 		c->a_begin(c);
 		skip_space(p);
 		if (*p->s != ']')
@@ -305,15 +305,15 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 				skip_space(p);
 				if (*p->s != ',')
 					break;
-				p->s++;
+				p->s++; /* skip ',' */
 				skip_space(p);
 			}
 		if (*p->s != ']')
 			return false;
-		p->s++;
+		p->s++; /* skip ']' */
 		c->a_end(c);
 	} else if (*p->s == '{') {
-		p->s++;
+		p->s++; /* skip '{' */
 		c->o_begin(c);
 		skip_space(p);
 		if (*p->s != '}')
@@ -325,7 +325,7 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 				skip_space(p);
 				if (*p->s != ':')
 					return false;
-				p->s++;
+				p->s++; /* skip ':' */
 				c->o_key(c, &key);
 				skip_space(p);
 				if (!kjson_parse_mid_rec(p, c))
@@ -333,12 +333,12 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 				skip_space(p);
 				if (*p->s != ',')
 					break;
-				p->s++;
+				p->s++; /* skip ',' */
 				skip_space(p);
 			}
 		if (*p->s != '}')
 			return false;
-		p->s++;
+		p->s++; /* skip '}' */
 		c->o_end(c);
 	} else {
 		union kjson_leaf_raw leaf;
@@ -352,17 +352,42 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 
 bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
 {
+	/* In the stack-based parser kjson_parse_mid_rec() above, the only
+	 * information stored for each level of parse tree is whether it is
+	 * inside an object or inside an array. However, upon reading new
+	 * tokens, this information can locally be derived since inside objects
+	 * they must start with STR ':' while arrays there is no ':'. Also the
+	 * end of these composite structures can be differentiated by the
+	 * different closing braces they are encoded by.
+	 *
+	 * Here we use this property to the effect of not requiring any
+	 * dynamic allocations and still produce the same trace as the recursive
+	 * version above. */
+
+	/* Assume the parse tree has depth less than 2^31; use 'size_t' if
+	 * that's not enough. */
 	unsigned depth = 0;
-	union kjson_leaf_raw leaf;
-	bool leaf_have_str = false;
+	union kjson_leaf_raw leaf;   /* next string token, only valid if ... */
+	bool leaf_have_str = false;  /* ... leaf_have_str is true (in arrays) */
 	while (1) {
 		char fst = *p->s;
+
+		/* Remember whether an array or object has been opened in this
+		 * iteration. */
 		bool ao_fst = false;
+		/* If there is a string in 'leaf', we for sure are in an array
+		 * and don't need to decide that again at the end of the
+		 * loop. */
 		bool known_in_arr = leaf_have_str; /* optimization for arrays */
+
 		if (leaf_have_str) {
+			/* The previous iteration left a string token in
+			 * 'leaf'. */
 			c->leaf(c, KJSON_LEAF_STRING, &leaf);
 			leaf_have_str = false;
 		} else if (fst == '[' || fst == '{') {
+			/* Begin a new composite token; empty composites are
+			 * handled entirely here. */
 			p->s++;
 			skip_space(p);
 			known_in_arr = (fst == '[');
@@ -384,11 +409,16 @@ bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
 				ao_fst = true;
 			}
 		} else {
+			/* Leaf token. */
 			int r = kjson_parse_leaf(p, &leaf);
 			if (r < 0)
 				return false;
 			c->leaf(c, r, &leaf);
 		}
+
+		/* For all but the first entry of composites: the next token is
+		 * not ',' if and only if this is the end of the composite.
+		 * Close all such composites. */
 		if (!ao_fst)
 			while (depth && *p->s != ',') {
 				switch (*p->s) {
@@ -401,30 +431,39 @@ bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
 					skip_space(p);
 				known_in_arr = false;
 			}
+
+		/* Token read (and back) on top-level, this is the end. */
 		if (!depth)
 			return true;
+
+		/* Here, we are sure inside a composite (depth != 0) and the
+		 * loop above ensures that the next token is ',', i.e., another
+		 * element of the composite follows. */
 		if (!ao_fst) {
 			if (*p->s != ',')
 				return false;
 			p->s++;
 			skip_space(p);
 		}
+
+		/* If we already determined that we are in an array *or* the
+		 * next token is not a string, it must be an array. */
 		if (known_in_arr || *p->s != '"')
 			c->a_entry(c);
 		else {
 			/* maybe object */
-			if (!kjson_read_string_utf8(p,
-			                            &leaf.s.begin,
-			                            &leaf.s.len))
+			if (!kjson_read_string_utf8(p, &leaf.s.begin,
+			                               &leaf.s.len))
 				return false;
 			skip_space(p);
 			if (*p->s == ':') {
 				/* in object */
 				c->o_key(c, &leaf.s);
-				p->s++;
+				p->s++; /* skip ':' */
 				skip_space(p);
 			} else {
-				/* in array */
+				/* in array, keep 'leaf' for the next
+				 * iteration */
 				c->a_entry(c);
 				leaf_have_str = true;
 			}
