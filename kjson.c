@@ -295,7 +295,7 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 {
 	if (*p->s == '[') {
 		p->s++; /* skip '[' */
-		c->a_begin(c);
+		c->begin(c, true);
 		skip_space(p);
 		if (*p->s != ']')
 			while (1) {
@@ -311,10 +311,10 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 		if (*p->s != ']')
 			return false;
 		p->s++; /* skip ']' */
-		c->a_end(c);
+		c->end(c, true);
 	} else if (*p->s == '{') {
 		p->s++; /* skip '{' */
-		c->o_begin(c);
+		c->begin(c, false);
 		skip_space(p);
 		if (*p->s != '}')
 			while (1) {
@@ -326,7 +326,7 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 				if (*p->s != ':')
 					return false;
 				p->s++; /* skip ':' */
-				c->o_key(c, &key);
+				c->o_entry(c, &key);
 				skip_space(p);
 				if (!kjson_parse_mid_rec(p, c))
 					return false;
@@ -339,7 +339,7 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 		if (*p->s != '}')
 			return false;
 		p->s++; /* skip '}' */
-		c->o_end(c);
+		c->end(c, false);
 	} else {
 		union kjson_leaf_raw leaf;
 		int r = kjson_parse_leaf(p, &leaf);
@@ -391,19 +391,13 @@ bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
 			p->s++;
 			skip_space(p);
 			known_in_arr = (fst == '[');
-			if (known_in_arr)
-				c->a_begin(c);
-			else
-				c->o_begin(c);
+			c->begin(c, known_in_arr);
 			/* We assume UTF-8 input, since it's JSON, therefore,
 			 * in the ASCII subset, '['+2 == ']' and '{'+2 == '}' */
 			if (*p->s == fst+2) {
 				p->s++;
 				skip_space(p);
-				if (known_in_arr)
-					c->a_end(c);
-				else
-					c->o_end(c);
+				c->end(c, known_in_arr);
 			} else {
 				depth++;
 				ao_fst = true;
@@ -422,8 +416,8 @@ bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
 		if (!ao_fst)
 			while (depth && *p->s != ',') {
 				switch (*p->s) {
-				case ']': c->a_end(c); break;
-				case '}': c->o_end(c); break;
+				case ']': c->end(c, true); break;
+				case '}': c->end(c, false); break;
 				default: return false;
 				}
 				p->s++;
@@ -458,7 +452,7 @@ bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
 			skip_space(p);
 			if (*p->s == ':') {
 				/* in object */
-				c->o_key(c, &leaf.s);
+				c->o_entry(c, &leaf.s);
 				p->s++; /* skip ':' */
 				skip_space(p);
 			} else {
@@ -534,8 +528,9 @@ static void ensure_one_left(size_t n, size_t *cap, void **data, size_t elem_sz)
 #define ENSURE_ONE_LEFT(n,cap,data) \
 	ensure_one_left(n,cap,(void **)(data),sizeof(**(data)))
 
-static void high_begin(struct kjson_mid_cb *c)
+static void high_begin(struct kjson_mid_cb *c, bool in_a)
 {
+	(void)in_a;
 	struct high_cb *cb = (struct high_cb *)c;
 	ENSURE_ONE_LEFT(cb->stack_sz, &cb->stack_cap, &cb->stack);
 	cb->stack_sz++;
@@ -551,7 +546,7 @@ static void high_a_entry(struct kjson_mid_cb *c)
 	e->v = &arr->data[arr->n++];
 }
 
-static void high_o_key(struct kjson_mid_cb *c, struct kjson_string *key)
+static void high_o_entry(struct kjson_mid_cb *c, struct kjson_string *key)
 {
 	struct high_cb *cb = (struct high_cb *)c;
 	struct elem *e = top(cb);
@@ -577,20 +572,15 @@ static void high_end(struct kjson_mid_cb *c, bool in_a)
 	}
 }
 
-static void high_a_end(struct kjson_mid_cb *c) { high_end(c, true); }
-static void high_o_end(struct kjson_mid_cb *c) { high_end(c, false); }
-
 bool kjson_parse(struct kjson_parser *p, struct kjson_value *v)
 {
 	struct high_cb cb = {
 		.parent = {
 			.leaf    = high_leaf,
-			.a_begin = high_begin,
+			.begin   = high_begin,
 			.a_entry = high_a_entry,
-			.a_end   = high_a_end,
-			.o_begin = high_begin,
-			.o_key   = high_o_key,
-			.o_end   = high_o_end,
+			.o_entry = high_o_entry,
+			.end     = high_end,
 		},
 		.stack     = malloc(sizeof(struct elem)),
 		.stack_sz  = 1,

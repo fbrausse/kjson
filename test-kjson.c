@@ -24,10 +24,10 @@ static void dbg_leaf(struct kjson_mid_cb *c, enum kjson_leaf_type type,
 	}
 }
 
-static void dbg_a_begin(struct kjson_mid_cb *c)
+static void dbg_begin(struct kjson_mid_cb *c, bool in_array)
 {
 	(void)c;
-	printf("array begin\n");
+	printf("%s begin\n", in_array ? "array" : "obj");
 }
 
 static void dbg_a_entry(struct kjson_mid_cb *c)
@@ -36,50 +36,39 @@ static void dbg_a_entry(struct kjson_mid_cb *c)
 	printf("array entry\n");
 }
 
-static void dbg_a_end  (struct kjson_mid_cb *c)
+static void dbg_end(struct kjson_mid_cb *c, bool in_array)
 {
 	(void)c;
-	printf("array end\n");
+	printf("%s end\n", in_array ? "array" : "obj");
 }
 
-static void dbg_o_begin(struct kjson_mid_cb *c)
+static void dbg_o_entry(struct kjson_mid_cb *c, struct kjson_string *key)
 {
 	(void)c;
-	printf("obj begin\n");
-}
-
-static void dbg_o_key  (struct kjson_mid_cb *c, struct kjson_string *key)
-{
-	(void)c;
-	printf("obj key: %.*s\n", (int)key->len, key->begin);
-}
-
-static void dbg_o_end  (struct kjson_mid_cb *c)
-{
-	(void)c;
-	printf("obj end\n");
+	printf("obj entry: %.*s\n", (int)key->len, key->begin);
 }
 
 static struct kjson_mid_cb dbg_cb = {
 	.leaf    = dbg_leaf   ,
-	.a_begin = dbg_a_begin,
+	.begin   = dbg_begin  ,
 	.a_entry = dbg_a_entry,
-	.a_end   = dbg_a_end  ,
-	.o_begin = dbg_o_begin,
-	.o_key   = dbg_o_key  ,
-	.o_end   = dbg_o_end  ,
+	.o_entry = dbg_o_entry,
+	.end     = dbg_end    ,
 };
 
 static void null() {}
+static void null_be(struct kjson_mid_cb *c, bool in_array)
+{
+	(void)c;
+	(void)in_array;
+}
 
 static struct kjson_mid_cb null_cb = {
 	.leaf    = null,
-	.a_begin = null,
+	.begin   = null_be,
 	.a_entry = null,
-	.a_end   = null,
-	.o_begin = null,
-	.o_key   = null,
-	.o_end   = null,
+	.o_entry = null,
+	.end     = null_be,
 };
 
 #include <unistd.h>

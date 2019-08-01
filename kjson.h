@@ -71,24 +71,20 @@ struct kjson_mid_cb {
 	void (*leaf   )(struct kjson_mid_cb *c, enum kjson_leaf_type type,
 	                union kjson_leaf_raw *l);
 
-	/* Called when an array value is encountered, i.e. on parsing '['. */
-	void (*a_begin)(struct kjson_mid_cb *c);
+	/* Called when a composite value is encountered, i.e. on parsing '['
+	 * or '{'. */
+	void (*begin)(struct kjson_mid_cb *c, bool in_array);
 
 	/* Called just before an array entry is parsed. */
 	void (*a_entry)(struct kjson_mid_cb *c);
 
-	/* Called at the end of an array value, i.e. on parsing ']'. */
-	void (*a_end  )(struct kjson_mid_cb *c);
-
-	/* Called when an object value is encountered, i.e. on parsing '{'. */
-	void (*o_begin)(struct kjson_mid_cb *c);
-
 	/* Called when an object entry is parsed, with *key containing a pointer
 	 * to the key of the entry. */
-	void (*o_key  )(struct kjson_mid_cb *c, struct kjson_string *key);
+	void (*o_entry)(struct kjson_mid_cb *c, struct kjson_string *key);
 
-	/* Called at the end of an object value, i.e. on parsing '}'. */
-	void (*o_end  )(struct kjson_mid_cb *c);
+	/* Called at the end of a composite value, i.e. on parsing ']'
+	 * or '}'. */
+	void (*end  )(struct kjson_mid_cb *c, bool in_array);
 };
 
 /* requires stack space linear in the depth of the document */
