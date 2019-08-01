@@ -611,11 +611,10 @@ static void kjson_value_print_composite(FILE *f, const struct kjson_value *v,
 	case KJSON_VALUE_STRING:
 		fputc('"', f);
 		for (size_t i=0; i<v->s.len; i++) {
-			unsigned char c = v->s.begin[i];
-			char *at = strchr(str_subst1, c);
-			if (at)
-				fprintf(f, "\\%c", str_pat[at-str_subst1]);
-			else if (c <= 0x1f)
+			char c = v->s.begin[i];
+			if (c == '"' || c == '\\')
+				fprintf(f, "\\%c", c);
+			else if ((unsigned char)c <= 0x1f)
 				fprintf(f, "\\u%04x", c);
 			else
 				fputc(c, f);
