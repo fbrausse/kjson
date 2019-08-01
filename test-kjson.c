@@ -8,7 +8,7 @@
 
 #include "kjson.h"
 
-static void dbg_leaf(struct kjson_mid_cb *c, enum kjson_leaf_type type,
+static void dbg_leaf(const struct kjson_mid_cb *c, enum kjson_leaf_type type,
                      union kjson_leaf_raw *l)
 {
 	(void)c;
@@ -24,31 +24,31 @@ static void dbg_leaf(struct kjson_mid_cb *c, enum kjson_leaf_type type,
 	}
 }
 
-static void dbg_begin(struct kjson_mid_cb *c, bool in_array)
+static void dbg_begin(const struct kjson_mid_cb *c, bool in_array)
 {
 	(void)c;
 	printf("%s begin\n", in_array ? "array" : "obj");
 }
 
-static void dbg_a_entry(struct kjson_mid_cb *c)
+static void dbg_a_entry(const struct kjson_mid_cb *c)
 {
 	(void)c;
 	printf("array entry\n");
 }
 
-static void dbg_end(struct kjson_mid_cb *c, bool in_array)
+static void dbg_end(const struct kjson_mid_cb *c, bool in_array)
 {
 	(void)c;
 	printf("%s end\n", in_array ? "array" : "obj");
 }
 
-static void dbg_o_entry(struct kjson_mid_cb *c, struct kjson_string *key)
+static void dbg_o_entry(const struct kjson_mid_cb *c, struct kjson_string *key)
 {
 	(void)c;
 	printf("obj entry: %.*s\n", (int)key->len, key->begin);
 }
 
-static struct kjson_mid_cb dbg_cb = {
+static const struct kjson_mid_cb dbg_cb = {
 	.leaf    = dbg_leaf   ,
 	.begin   = dbg_begin  ,
 	.a_entry = dbg_a_entry,
@@ -57,13 +57,13 @@ static struct kjson_mid_cb dbg_cb = {
 };
 
 static void null() {}
-static void null_be(struct kjson_mid_cb *c, bool in_array)
+static void null_be(const struct kjson_mid_cb *c, bool in_array)
 {
 	(void)c;
 	(void)in_array;
 }
 
-static struct kjson_mid_cb null_cb = {
+static const struct kjson_mid_cb null_cb = {
 	.leaf    = null,
 	.begin   = null_be,
 	.a_entry = null,
@@ -75,7 +75,7 @@ static struct kjson_mid_cb null_cb = {
 
 #define DIE(code,...) do { fprintf(stderr, __VA_ARGS__); exit(code); } while (0)
 
-static bool high_v(struct kjson_parser *p, struct kjson_mid_cb *cb)
+static bool high_v(struct kjson_parser *p, const struct kjson_mid_cb *cb)
 {
 	(void)cb;
 	struct kjson_value v;
@@ -86,7 +86,7 @@ static bool high_v(struct kjson_parser *p, struct kjson_mid_cb *cb)
 	return r;
 }
 
-static bool high(struct kjson_parser *p, struct kjson_mid_cb *cb)
+static bool high(struct kjson_parser *p, const struct kjson_mid_cb *cb)
 {
 	(void)cb;
 	struct kjson_value v;
@@ -108,11 +108,11 @@ int main(int argc, char **argv)
 			        optopt);
 		case '?': DIE(1,"error: unknown option '-%c'\n", optopt);
 		}
-	bool (*parse_f)(struct kjson_parser *, struct kjson_mid_cb *) =
+	bool (*parse_f)(struct kjson_parser *, const struct kjson_mid_cb *) =
 		mid_cb == 1 ? kjson_parse_mid_rec :
 		mid_cb == 2 ? kjson_parse_mid :
 		verbosity ? high_v : high;
-	struct kjson_mid_cb *cb = verbosity ? &dbg_cb : &null_cb;
+	const struct kjson_mid_cb *cb = verbosity ? &dbg_cb : &null_cb;
 	char *line = NULL;
 	size_t sz = 0;
 	for (int n=0; getline(&line, &sz, stdin) > 0; n++) {

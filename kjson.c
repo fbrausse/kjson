@@ -291,7 +291,7 @@ static int kjson_parse_leaf(struct kjson_parser *p, union kjson_leaf_raw *leaf)
 	}
 }
 
-bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
+bool kjson_parse_mid_rec(struct kjson_parser *p, const struct kjson_mid_cb *c)
 {
 	if (*p->s == '[') {
 		p->s++; /* skip '[' */
@@ -350,7 +350,7 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, struct kjson_mid_cb *c)
 	return true;
 }
 
-bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
+bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c)
 {
 	/* In the stack-based parser kjson_parse_mid_rec() above, the only
 	 * information stored for each level of parse tree is whether it is
@@ -470,7 +470,7 @@ bool kjson_parse_mid(struct kjson_parser *p, struct kjson_mid_cb *c)
  * -------------------------------------------------------------------------- */
 
 struct high_cb {
-	struct kjson_mid_cb parent;
+	const struct kjson_mid_cb parent;
 	struct elem {
 		struct kjson_value *v;
 		union {
@@ -490,7 +490,7 @@ static struct elem * top(struct high_cb *cb)
 	return &cb->stack[cb->stack_sz-1];
 }
 
-static void high_leaf(struct kjson_mid_cb *c, enum kjson_leaf_type type,
+static void high_leaf(const struct kjson_mid_cb *c, enum kjson_leaf_type type,
                       union kjson_leaf_raw *l)
 {
 	struct high_cb *cb = (struct high_cb *)c;
@@ -528,7 +528,7 @@ static void ensure_one_left(size_t n, size_t *cap, void **data, size_t elem_sz)
 #define ENSURE_ONE_LEFT(n,cap,data) \
 	ensure_one_left(n,cap,(void **)(data),sizeof(**(data)))
 
-static void high_begin(struct kjson_mid_cb *c, bool in_a)
+static void high_begin(const struct kjson_mid_cb *c, bool in_a)
 {
 	(void)in_a;
 	struct high_cb *cb = (struct high_cb *)c;
@@ -537,7 +537,7 @@ static void high_begin(struct kjson_mid_cb *c, bool in_a)
 	*top(cb) = (struct elem)ELEM_INIT;
 }
 
-static void high_a_entry(struct kjson_mid_cb *c)
+static void high_a_entry(const struct kjson_mid_cb *c)
 {
 	struct high_cb *cb = (struct high_cb *)c;
 	struct elem *e = top(cb);
@@ -546,7 +546,7 @@ static void high_a_entry(struct kjson_mid_cb *c)
 	e->v = &arr->data[arr->n++];
 }
 
-static void high_o_entry(struct kjson_mid_cb *c, struct kjson_string *key)
+static void high_o_entry(const struct kjson_mid_cb *c, struct kjson_string *key)
 {
 	struct high_cb *cb = (struct high_cb *)c;
 	struct elem *e = top(cb);
@@ -557,7 +557,7 @@ static void high_o_entry(struct kjson_mid_cb *c, struct kjson_string *key)
 	e->v = &oe->value;
 }
 
-static void high_end(struct kjson_mid_cb *c, bool in_a)
+static void high_end(const struct kjson_mid_cb *c, bool in_a)
 {
 	struct high_cb *cb = (struct high_cb *)c;
 	struct elem *e = top(cb);
