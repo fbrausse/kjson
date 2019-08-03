@@ -1,6 +1,6 @@
 kjson
 =====
-A [JSON](http://json.org/) parser in C99, which assumes that the input string is writeable.
+A [JSON](http://json.org/) parser in C11, which assumes that the input string is writeable.
 It focusses on speed and portability and it provides 3 layers of API: low, mid and high.
 The first two layers use constant memory, while the third one requires dynamic memory linear
 in the number of array or object entries. The second layer 'mid' is a callback-based parser
