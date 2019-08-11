@@ -96,13 +96,24 @@ static bool high(struct kjson_parser *p, const struct kjson_mid_cb *cb)
 	return r;
 }
 
+#include <string.h>
+
+#define MAX(a,b)	((a) > (b) ? (a) : (b))
+
 int main(int argc, char **argv)
 {
 	int mid_cb = 0;
 	int verbosity = 0;
-	for (int opt; (opt = getopt(argc, argv, ":hm:v")) != -1;)
+	int single_doc = false;
+	size_t buf_sz = 4096;
+	for (int opt; (opt = getopt(argc, argv, ":1b:hm:v")) != -1;)
 		switch (opt) {
-		case 'h': DIE(1,"usage: %s [ -m { 1 | 2 } | -v ]\n", argv[0]);
+		case '1': single_doc = true; break;
+		case 'b':
+			if (sscanf(optarg, "%zu", &buf_sz) < 1 || !buf_sz)
+				DIE(1,"cannot parse parameter to '-b' as size\n");
+			break;
+		case 'h': DIE(1,"usage: %s [-1] [ -m { 1 | 2 } | -v ]\n", argv[0]);
 		case 'm': mid_cb = atoi(optarg); break;
 		case 'v': verbosity++; break;
 		case ':': DIE(1,"error: option '-%c' requires a parameter\n",
@@ -114,13 +125,33 @@ int main(int argc, char **argv)
 		mid_cb == 2 ? kjson_parse_mid :
 		verbosity ? high_v : high;
 	const struct kjson_mid_cb *cb = verbosity ? &dbg_cb : &null_cb;
-	char *line = NULL;
-	size_t sz = 0;
-	for (int n=0; getline(&line, &sz, stdin) > 0; n++) {
-		struct kjson_parser p = { line };
+	size_t data_cap = buf_sz;
+	char *data = malloc(data_cap);
+	if (single_doc) {
+		size_t data_sz = 0;
+		static char buf[4096];
+		for (size_t rd; (rd = fread(buf, 1, sizeof(buf), stdin)) > 0;) {
+			if (data_sz + rd > data_cap) {
+				data = realloc(data, data_cap = MAX(rd, data_cap * 2));
+				assert(data);
+			}
+			memcpy(data + data_sz, buf, rd);
+			data_sz += rd;
+			if (rd < sizeof(buf))
+				break;
+		}
+		assert(feof(stdin));
+		struct kjson_parser p = { data };
 		bool r = parse_f(&p, cb);
 		assert(r);
-		(void)r;
+	} else {
+		for (int n=0; getline(&data, &data_cap, stdin) > 0; n++) {
+			struct kjson_parser p = { data };
+			bool r = parse_f(&p, cb);
+			assert(r);
+			(void)r;
+		}
 	}
-	free(line);
+	free(data);
+	return 0;
 }
