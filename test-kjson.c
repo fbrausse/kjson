@@ -96,7 +96,8 @@ static bool high(struct kjson_parser *p, const struct kjson_mid_cb *cb)
 	return r;
 }
 
-#include <string.h>
+#include <string.h>	/* memcpy() */
+#include <sys/time.h>	/* gettimeofday() */
 
 #define MAX(a,b)	((a) > (b) ? (a) : (b))
 
@@ -104,7 +105,7 @@ int main(int argc, char **argv)
 {
 	int mid_cb = 0;
 	int verbosity = 0;
-	int single_doc = false;
+	bool single_doc = false;
 	size_t buf_sz = 4096;
 	for (int opt; (opt = getopt(argc, argv, ":1b:hm:v")) != -1;)
 		switch (opt) {
@@ -142,8 +143,13 @@ int main(int argc, char **argv)
 		}
 		assert(feof(stdin));
 		struct kjson_parser p = { data };
+		struct timeval tv, tw;
+		gettimeofday(&tv, NULL);
 		bool r = parse_f(&p, cb);
+		gettimeofday(&tw, NULL);
 		assert(r);
+		(void)r;
+		fprintf(stderr, "time: %luµs\n", (tw.tv_sec - tv.tv_sec) * 1000000 + (tw.tv_usec - tv.tv_usec));
 	} else {
 		for (int n=0; getline(&data, &data_cap, stdin) > 0; n++) {
 			struct kjson_parser p = { data };
