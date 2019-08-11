@@ -108,12 +108,13 @@ static void run_single(FILE *f, char **data, size_t *data_cap,
 	size_t data_sz = 0;
 	static char buf[4096];
 	for (size_t rd; (rd = fread(buf, 1, sizeof(buf), f)) > 0;) {
-		if (data_sz + rd > *data_cap) {
-			*data = realloc(*data, *data_cap = MAX(rd, *data_cap * 2));
+		size_t n = data_sz + rd;
+		if (n > *data_cap) {
+			*data = realloc(*data, *data_cap = MAX(n, 2 * *data_cap));
 			assert(*data);
 		}
 		memcpy(*data + data_sz, buf, rd);
-		data_sz += rd;
+		data_sz = n;
 		if (rd < sizeof(buf))
 			break;
 	}

@@ -7,6 +7,7 @@
 #include <errno.h>	/* errno(3) */
 #include <assert.h>	/* assert(3) */
 #include <limits.h>	/* CHAR_BIT */
+#include <math.h>	/* ldexp() */
 
 #include "kjson.h"
 
@@ -275,6 +276,13 @@ static int kjson_parse_leaf(struct kjson_parser *p, union kjson_leaf_raw *leaf)
 		if (*t == '.') {
 			double frac = v + strtod(t+1, &t);
 			leaf->d = pos ? -frac : frac;
+			ty = KJSON_LEAF_NUMBER_DOUBLE;
+		} else if (*t == 'E' || *t == 'e') {
+			long exp = strtol(t+1, &t, 10);
+			if (errno && (exp <= INT_MIN || exp >= INT_MAX))
+				return false;
+			double d = v;
+			leaf->d = ldexp(pos ? d : -d, exp);
 			ty = KJSON_LEAF_NUMBER_DOUBLE;
 		} else {
 			intmax_t w = v;
