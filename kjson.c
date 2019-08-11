@@ -390,17 +390,18 @@ bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c)
 			 * handled entirely here. */
 			p->s++;
 			skip_space(p);
-			known_in_arr = (fst == '[');
-			c->begin(c, known_in_arr);
+			bool this_is_arr = (fst == '[');
+			c->begin(c, this_is_arr);
 			/* We assume UTF-8 input, since it's JSON, therefore,
 			 * in the ASCII subset, '['+2 == ']' and '{'+2 == '}' */
 			if (*p->s == fst+2) {
 				p->s++;
 				skip_space(p);
-				c->end(c, known_in_arr);
+				c->end(c, this_is_arr);
 			} else {
 				depth++;
 				ao_fst = true;
+				known_in_arr = this_is_arr;
 			}
 		} else {
 			/* Leaf token. */
