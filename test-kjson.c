@@ -96,10 +96,50 @@ static bool high(struct kjson_parser *p, const struct kjson_mid_cb *cb)
 	return r;
 }
 
-#include <string.h>	/* memcpy() */
-#include <sys/time.h>	/* gettimeofday() */
+#include <string.h>		/* memcpy() */
+#include <sys/time.h>		/* gettimeofday() */
 
 #define MAX(a,b)	((a) > (b) ? (a) : (b))
+
+static void run_single(FILE *f, char **data, size_t *data_cap,
+                       bool (*parse_f)(struct kjson_parser *, const struct kjson_mid_cb *),
+                       const struct kjson_mid_cb *cb)
+{
+	size_t data_sz = 0;
+	static char buf[4096];
+	for (size_t rd; (rd = fread(buf, 1, sizeof(buf), f)) > 0;) {
+		if (data_sz + rd > *data_cap) {
+			*data = realloc(*data, *data_cap = MAX(rd, *data_cap * 2));
+			assert(*data);
+		}
+		memcpy(*data + data_sz, buf, rd);
+		data_sz += rd;
+		if (rd < sizeof(buf))
+			break;
+	}
+	assert(feof(f));
+	struct kjson_parser p = { *data };
+	struct timeval tv, tw;
+	gettimeofday(&tv, NULL);
+	bool r = parse_f(&p, cb);
+	gettimeofday(&tw, NULL);
+	assert(r);
+	(void)r;
+	fprintf(stderr, "time: %luµs\n",
+	        (tw.tv_sec - tv.tv_sec) * 1000000 + (tw.tv_usec - tv.tv_usec));
+}
+
+static void run_lines(FILE *f, char **data, size_t *data_cap,
+                      bool (*parse_f)(struct kjson_parser *, const struct kjson_mid_cb *),
+                      const struct kjson_mid_cb *cb)
+{
+	for (int n=0; getline(data, data_cap, f) > 0; n++) {
+		struct kjson_parser p = { *data };
+		bool r = parse_f(&p, cb);
+		assert(r);
+		(void)r;
+	}
+}
 
 int main(int argc, char **argv)
 {
@@ -114,7 +154,7 @@ int main(int argc, char **argv)
 			if (sscanf(optarg, "%zu", &buf_sz) < 1 || !buf_sz)
 				DIE(1,"cannot parse parameter to '-b' as size\n");
 			break;
-		case 'h': DIE(1,"usage: %s [-1] [ -m { 1 | 2 } | -v ]\n", argv[0]);
+		case 'h': DIE(1,"usage: %s [-1] [ -m { 1 | 2 } | -v ] [FILES...]\n", argv[0]);
 		case 'm': mid_cb = atoi(optarg); break;
 		case 'v': verbosity++; break;
 		case ':': DIE(1,"error: option '-%c' requires a parameter\n",
@@ -126,38 +166,21 @@ int main(int argc, char **argv)
 		mid_cb == 2 ? kjson_parse_mid :
 		verbosity ? high_v : high;
 	const struct kjson_mid_cb *cb = verbosity ? &dbg_cb : &null_cb;
+	void (*run)(FILE *f, char **data, size_t *data_cap,
+	            bool (*parse_f)(struct kjson_parser *, const struct kjson_mid_cb *),
+	            const struct kjson_mid_cb *cb)
+		= single_doc ? run_single : run_lines;
 	size_t data_cap = buf_sz;
 	char *data = malloc(data_cap);
-	if (single_doc) {
-		size_t data_sz = 0;
-		static char buf[4096];
-		for (size_t rd; (rd = fread(buf, 1, sizeof(buf), stdin)) > 0;) {
-			if (data_sz + rd > data_cap) {
-				data = realloc(data, data_cap = MAX(rd, data_cap * 2));
-				assert(data);
-			}
-			memcpy(data + data_sz, buf, rd);
-			data_sz += rd;
-			if (rd < sizeof(buf))
-				break;
+	if (optind < argc)
+		for (; optind < argc; optind++) {
+			FILE *f = fopen(argv[optind], "r");
+			assert(f);
+			run(f, &data, &data_cap, parse_f, cb);
+			fclose(f);
 		}
-		assert(feof(stdin));
-		struct kjson_parser p = { data };
-		struct timeval tv, tw;
-		gettimeofday(&tv, NULL);
-		bool r = parse_f(&p, cb);
-		gettimeofday(&tw, NULL);
-		assert(r);
-		(void)r;
-		fprintf(stderr, "time: %luµs\n", (tw.tv_sec - tv.tv_sec) * 1000000 + (tw.tv_usec - tv.tv_usec));
-	} else {
-		for (int n=0; getline(&data, &data_cap, stdin) > 0; n++) {
-			struct kjson_parser p = { data };
-			bool r = parse_f(&p, cb);
-			assert(r);
-			(void)r;
-		}
-	}
+	else
+		run(stdin, &data, &data_cap, parse_f, cb);
 	free(data);
 	return 0;
 }
