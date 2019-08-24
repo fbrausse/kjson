@@ -1,5 +1,8 @@
 # tested on x86_64-pc-linux-gnu with gcc-9.1, clang-8, CompCert-3.5, tcc-0.9.27
 
+LIB_OBJS = $(addprefix pic/,\
+	kjson.o \
+)
 OBJS = \
 	kjson.o \
 	test-kjson.o \
@@ -26,7 +29,19 @@ DEPS = $(OBJS:.o=.d)
 
 .PHONY: all clean
 
-all: test-kjson
+all: test-kjson libkjson.so
+
+libkjson.so: override LDFLAGS += -shared
+libkjson.so: $(LIB_OBJS) | pic/
+	$(CC) $(LDFLAGS) -o $@ $+ $(LDLIBS)
+
+$(LIB_OBJS): pic/%.o: %.c | pic/
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(LIB_OBJS): override CFLAGS += -fPIC
+
+pic/:
+	mkdir -p $@
 
 test-kjson: $(OBJS)
 
@@ -36,6 +51,6 @@ $(OBJS): %.o: %.c Makefile
 test-kjson.o: override CPPFLAGS += -D_POSIX_C_SOURCE=200809L
 
 clean:
-	$(RM) $(OBJS) $(DEPS) $(EXES)
+	$(RM) $(OBJS) $(LIB_OBJS) $(DEPS) $(EXES)
 
 -include $(DEPS)
