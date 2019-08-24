@@ -3,6 +3,9 @@
 LIB_OBJS = $(addprefix pic/,\
 	kjson.o \
 )
+SLIB_OBJS = \
+	kjson.o \
+
 OBJS = \
 	kjson.o \
 	test-kjson.o \
@@ -34,6 +37,9 @@ all: test-kjson libkjson.so
 libkjson.so: override LDFLAGS += -shared
 libkjson.so: $(LIB_OBJS) | pic/
 	$(CC) $(LDFLAGS) -o $@ $+ $(LDLIBS)
+
+libkjson.a: $(SLIB_OBJS)
+	$(RM) $@ && $(AR) rcs $@ $(SLIB_OBJS)
 
 $(LIB_OBJS): pic/%.o: %.c | pic/
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
