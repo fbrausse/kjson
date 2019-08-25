@@ -1,5 +1,7 @@
 # tested on x86_64-pc-linux-gnu with gcc-9.1, clang-8, CompCert-3.5, tcc-0.9.27
 
+DESTDIR ?= .
+
 LIB_OBJS = $(addprefix pic/,\
 	kjson.o \
 )
@@ -34,11 +36,22 @@ DEPS = $(OBJS:.o=.d)
 
 all: test-kjson libkjson.so
 
-libkjson.so: override LDFLAGS += -shared
-libkjson.so: $(LIB_OBJS) | pic/
+pkgconfig/kjson.pc: Makefile | pkgconfig/
+	printf "\
+Name: kjson\\n\
+Version: 0.1\\n\
+Description: A JSON parser in C\\n\
+Cflags: %s\\n\
+Libs: %s\\n\
+" "-I$(realpath $(DESTDIR))" "-L$(realpath $(DESTDIR)) -lkjson" > $@
+
+libkjson.so: override LDFLAGS += -dynamiclib \
+	-install_name $(realpath $(DESTDIR)$(libdir))/libkjson.so
+
+libkjson.so: $(LIB_OBJS) | pkgconfig/kjson.pc pic/
 	$(CC) $(LDFLAGS) -o $@ $+ $(LDLIBS)
 
-libkjson.a: $(SLIB_OBJS)
+libkjson.a: $(SLIB_OBJS) | pkgconfig/kjson.pc
 	$(RM) $@ && $(AR) rcs $@ $(SLIB_OBJS)
 
 $(LIB_OBJS): pic/%.o: %.c | pic/
@@ -46,7 +59,7 @@ $(LIB_OBJS): pic/%.o: %.c | pic/
 
 $(LIB_OBJS): override CFLAGS += -fPIC
 
-pic/:
+%/:
 	mkdir -p $@
 
 test-kjson: $(OBJS)

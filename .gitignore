@@ -1,3 +1,4 @@
 *.o
 *.d
 /test-kjson
+/pkgconfig/kjson.pc
