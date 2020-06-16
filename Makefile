@@ -30,6 +30,12 @@ else
   CSTD = -std=c11
 endif
 
+ifeq ($(OS),Windows_NT)
+  OS = Windows
+else
+  OS = $(shell uname)
+endif
+
 DEPS = $(OBJS:.o=.d)
 
 .PHONY: all clean
@@ -45,8 +51,12 @@ Cflags: %s\\n\
 Libs: %s\\n\
 " "-I$(realpath $(DESTDIR))" "-L$(realpath $(DESTDIR)) -lkjson" > $@
 
+ifeq ($(OS),Darwin)
 libkjson.so: override LDFLAGS += -dynamiclib \
 	-install_name $(realpath $(DESTDIR)$(libdir))/libkjson.so
+else
+libkjson.so: override LDFLAGS += -shared
+endif
 
 libkjson.so: $(LIB_OBJS) | pkgconfig/kjson.pc pic/
 	$(CC) $(LDFLAGS) -o $@ $+ $(LDLIBS)
