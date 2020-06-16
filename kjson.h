@@ -96,11 +96,24 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, const struct kjson_mid_cb *c);
  * than kjson_parse_mid_rec() */
 bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c);
 
+bool kjson_parse_mid2(struct kjson_parser *p, const struct kjson_mid_cb *c,
+                      union kjson_leaf_raw *l);
+
 /* --------------------------------------------------------------------------
  * high-level interface (dynamically build tree structure)
  * -------------------------------------------------------------------------- */
 
 struct kjson_object_entry;
+
+struct kjson_array {
+	struct kjson_value *data;
+	size_t n;
+};
+
+struct kjson_object {
+	struct kjson_object_entry *data;
+	size_t n;
+};
 
 struct kjson_value {
 	enum kjson_value_type type;
@@ -109,14 +122,8 @@ struct kjson_value {
 		intmax_t i;
 		double d;
 		struct kjson_string s;
-		struct kjson_array {
-			struct kjson_value *data;
-			size_t n;
-		} a;
-		struct kjson_object {
-			struct kjson_object_entry *data;
-			size_t n;
-		} o;
+		struct kjson_array a;
+		struct kjson_object o;
 	};
 };
 
