@@ -24,6 +24,7 @@ enum kjson_value_type {
 	KJSON_VALUE_STRING,
 	KJSON_VALUE_ARRAY,
 	KJSON_VALUE_OBJECT,
+	KJSON_VALUE_N
 };
 
 struct kjson_string {
@@ -48,6 +49,15 @@ void kjson_read_double(struct kjson_parser *p, double *v);
  */
 bool kjson_read_string_utf8(struct kjson_parser *p, char **begin, size_t *len);
 
+union kjson_leaf_raw {
+	bool b;
+	intmax_t i;
+	double d;
+	struct kjson_string s;
+};
+
+int kjson_read_number(struct kjson_parser *p, union kjson_leaf_raw *leaf);
+
 /* --------------------------------------------------------------------------
  * mid-level interface (callback-based parser, no allocations)
  * -------------------------------------------------------------------------- */
@@ -58,14 +68,17 @@ enum kjson_leaf_type {
 	KJSON_LEAF_NUMBER_INTEGER = KJSON_VALUE_NUMBER_INTEGER,
 	KJSON_LEAF_NUMBER_DOUBLE  = KJSON_VALUE_NUMBER_DOUBLE,
 	KJSON_LEAF_STRING         = KJSON_VALUE_STRING,
+	KJSON_LEAF_N
 };
 
-union kjson_leaf_raw {
-	bool b;
-	intmax_t i;
-	double d;
-	struct kjson_string s;
-};
+struct kjson_mid_cb;
+
+/* Tries to parse the non-string, non-boolean and non-null leaf at p->s.
+ * On success returns its kjson_leaf_type after storing the interpreted content
+ * in *l and advancing p->s to point just after the leaf. On error returns a
+ * negative value. */
+typedef int kjson_read_other_f(const struct kjson_mid_cb *c,
+                               struct kjson_parser *p, union kjson_leaf_raw *l);
 
 struct kjson_mid_cb {
 	/* Called whenever a null-, boolean, numeric or string value is
@@ -87,6 +100,10 @@ struct kjson_mid_cb {
 	/* Called at the end of a composite value, i.e. on parsing ']'
 	 * or '}'. */
 	void (*end  )(const struct kjson_mid_cb *c, bool in_array);
+
+	/* Called to parse a non-string, non-boolean and non-null leaf.
+	 * If NULL, the default is to call kjson_read_number(p, l). */
+	kjson_read_other_f *read_other;
 };
 
 /* requires stack space linear in the depth of the document */
@@ -132,7 +149,14 @@ struct kjson_object_entry {
 	struct kjson_value value;
 };
 
+typedef void kjson_store_leaf_f(struct kjson_value *v,
+                                enum kjson_leaf_type type,
+                                union kjson_leaf_raw *l);
+
 bool kjson_parse(struct kjson_parser *p, struct kjson_value *v);
+bool kjson_parse2(struct kjson_parser *p, struct kjson_value *v,
+                  kjson_read_other_f *read_other,
+                  kjson_store_leaf_f *store_leaf);
 void kjson_value_print(FILE *f, const struct kjson_value *v);
 void kjson_value_fini(const struct kjson_value *v);
 

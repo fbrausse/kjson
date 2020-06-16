@@ -243,7 +243,46 @@ static void skip_space(struct kjson_parser *p)
 	p->s += strspn(p->s, "\t\r\n ");
 }
 
-static int kjson_parse_leaf(struct kjson_parser *p, union kjson_leaf_raw *leaf)
+int kjson_read_number(struct kjson_parser *p, union kjson_leaf_raw *leaf)
+{
+	bool pos = true;
+	if (*p->s == '-') {
+		pos = false;
+		p->s++;
+	}
+	char *t;
+	errno = 0;
+	uintmax_t v = strtoumax(p->s, &t, 10);
+	if (t == p->s || (v == UINTMAX_MAX && errno))
+		return -1;
+	enum kjson_leaf_type ty;
+	if (*t == '.') {
+		double frac = v + strtod(t+1, &t);
+		leaf->d = pos ? -frac : frac;
+		ty = KJSON_LEAF_NUMBER_DOUBLE;
+	} else if (*t == 'E' || *t == 'e') {
+		long exp = strtol(t+1, &t, 10);
+		if (errno && (exp <= INT_MIN || exp >= INT_MAX))
+			return -1;
+		double d = v;
+		leaf->d = ldexp(pos ? d : -d, exp);
+		ty = KJSON_LEAF_NUMBER_DOUBLE;
+	} else {
+		intmax_t w = v;
+		if (!pos) {
+			if (v > INTMAX_MAX)
+				return -1;
+			w = -w;
+		}
+		leaf->i = w;
+		ty = KJSON_LEAF_NUMBER_INTEGER;
+	}
+	p->s = t;
+	return ty;
+}
+
+static int kjson_parse_leaf(struct kjson_parser *p, union kjson_leaf_raw *leaf,
+                            const struct kjson_mid_cb *cb)
 {
 	if (*p->s == '"') {
 		if (!kjson_read_string_utf8(p, &leaf->s.begin, &leaf->s.len))
@@ -261,41 +300,8 @@ static int kjson_parse_leaf(struct kjson_parser *p, union kjson_leaf_raw *leaf)
 		p->s += 5;
 		return KJSON_LEAF_BOOLEAN;
 	} else {
-		/* number */
-		bool pos = true;
-		if (*p->s == '-') {
-			pos = false;
-			p->s++;
-		}
-		char *t;
-		errno = 0;
-		uintmax_t v = strtoumax(p->s, &t, 10);
-		if (t == p->s || (v == UINTMAX_MAX && errno))
-			return false;
-		enum kjson_leaf_type ty;
-		if (*t == '.') {
-			double frac = v + strtod(t+1, &t);
-			leaf->d = pos ? -frac : frac;
-			ty = KJSON_LEAF_NUMBER_DOUBLE;
-		} else if (*t == 'E' || *t == 'e') {
-			long exp = strtol(t+1, &t, 10);
-			if (errno && (exp <= INT_MIN || exp >= INT_MAX))
-				return false;
-			double d = v;
-			leaf->d = ldexp(pos ? d : -d, exp);
-			ty = KJSON_LEAF_NUMBER_DOUBLE;
-		} else {
-			intmax_t w = v;
-			if (!pos) {
-				if (v > INTMAX_MAX)
-					return false;
-				w = -w;
-			}
-			leaf->i = w;
-			ty = KJSON_LEAF_NUMBER_INTEGER;
-		}
-		p->s = t;
-		return ty;
+		return cb->read_other ? cb->read_other(cb, p, leaf)
+		                      : kjson_read_number(p, leaf);
 	}
 }
 
@@ -350,7 +356,7 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, const struct kjson_mid_cb *c)
 		c->end(c, false);
 	} else {
 		union kjson_leaf_raw leaf;
-		int r = kjson_parse_leaf(p, &leaf);
+		int r = kjson_parse_leaf(p, &leaf, c);
 		if (r < 0)
 			return false;
 		c->leaf(c, (enum kjson_leaf_type)r, &leaf);
@@ -359,6 +365,13 @@ bool kjson_parse_mid_rec(struct kjson_parser *p, const struct kjson_mid_cb *c)
 }
 
 bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c)
+{
+	union kjson_leaf_raw leaf;
+	return kjson_parse_mid2(p, c, &leaf);
+}
+
+bool kjson_parse_mid2(struct kjson_parser *p, const struct kjson_mid_cb *c,
+                      union kjson_leaf_raw *leaf)
 {
 	/* In the stack-based parser kjson_parse_mid_rec() above, the only
 	 * information stored for each level of parse tree is whether it is
@@ -375,7 +388,7 @@ bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c)
 	/* Assume the parse tree has depth less than 2^31; use 'size_t' if
 	 * that's not enough. */
 	unsigned depth = 0;
-	union kjson_leaf_raw leaf;   /* next string token, only valid if ... */
+	                             /* next string token, only valid if ... */
 	bool leaf_have_str = false;  /* ... leaf_have_str is true (in arrays) */
 	while (1) {
 		char fst = *p->s;
@@ -391,7 +404,7 @@ bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c)
 		if (leaf_have_str) {
 			/* The previous iteration left a string token in
 			 * 'leaf'. */
-			c->leaf(c, KJSON_LEAF_STRING, &leaf);
+			c->leaf(c, KJSON_LEAF_STRING, leaf);
 			leaf_have_str = false;
 		} else if (fst == '[' || fst == '{') {
 			/* Begin a new composite token; empty composites are
@@ -413,10 +426,10 @@ bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c)
 			}
 		} else {
 			/* Leaf token. */
-			int r = kjson_parse_leaf(p, &leaf);
+			int r = kjson_parse_leaf(p, leaf, c);
 			if (r < 0)
 				return false;
-			c->leaf(c, r, &leaf);
+			c->leaf(c, r, leaf);
 		}
 
 		/* For all but the first entry of composites: the next token is
@@ -454,13 +467,13 @@ bool kjson_parse_mid(struct kjson_parser *p, const struct kjson_mid_cb *c)
 			c->a_entry(c);
 		else {
 			/* maybe object */
-			if (!kjson_read_string_utf8(p, &leaf.s.begin,
-			                               &leaf.s.len))
+			if (!kjson_read_string_utf8(p, &leaf->s.begin,
+			                               &leaf->s.len))
 				return false;
 			skip_space(p);
 			if (*p->s == ':') {
 				/* in object */
-				c->o_entry(c, &leaf.s);
+				c->o_entry(c, &leaf->s);
 				p->s++; /* skip ':' */
 				skip_space(p);
 			} else {
@@ -489,6 +502,7 @@ struct high_cb {
 	} *stack;
 	size_t stack_sz;
 	size_t stack_cap;
+	kjson_store_leaf_f *store_leaf;
 };
 
 #define ELEM_INIT { .arr = { .data = NULL, .n = 0 }, .cap = 0 }
@@ -522,6 +536,10 @@ static void high_leaf(const struct kjson_mid_cb *c, enum kjson_leaf_type type,
 	case KJSON_LEAF_STRING:
 		v->type = KJSON_VALUE_STRING;
 		v->s = l->s;
+		break;
+	default:
+		cb->store_leaf(v, type, l);
+		break;
 	}
 }
 
@@ -582,17 +600,26 @@ static void high_end(const struct kjson_mid_cb *c, bool in_a)
 
 bool kjson_parse(struct kjson_parser *p, struct kjson_value *v)
 {
+	return kjson_parse2(p, v, NULL, NULL);
+}
+
+bool kjson_parse2(struct kjson_parser *p, struct kjson_value *v,
+                  kjson_read_other_f *read_other,
+                  kjson_store_leaf_f *store_leaf)
+{
 	struct high_cb cb = {
 		.parent = {
-			.leaf    = high_leaf,
-			.begin   = high_begin,
-			.a_entry = high_a_entry,
-			.o_entry = high_o_entry,
-			.end     = high_end,
+			.leaf       = high_leaf,
+			.begin      = high_begin,
+			.a_entry    = high_a_entry,
+			.o_entry    = high_o_entry,
+			.end        = high_end,
+			.read_other = read_other,
 		},
-		.stack     = malloc(sizeof(struct elem)),
-		.stack_sz  = 1,
-		.stack_cap = 1,
+		.stack      = malloc(sizeof(struct elem)),
+		.stack_sz   = 1,
+		.stack_cap  = 1,
+		.store_leaf = store_leaf,
 	};
 	cb.stack[0] = (struct elem){ .v = v, };
 	bool r = kjson_parse_mid(p, &cb.parent);
