@@ -10,6 +10,7 @@
 #include <regex>
 #include <iostream>
 #include <memory>
+#include <charconv>	/* from_chars() */
 
 #include <kjson.h>
 
@@ -46,7 +47,15 @@ struct base : base0<Opt>, base1<T> {
 template <> char * base1<char *>::data() { return str; }
 template <> char * base1<std::string>::data() { return str.data(); }
 
+template <typename Opt> class arr_itr;
+
 }
+
+template <typename T> struct requests_string : std::false_type {};
+template <> struct requests_string<std::string> : std::true_type {};
+template <> struct requests_string<std::string_view> : std::true_type {};
+
+template <typename T> struct requests_number : std::false_type {};
 
 template <typename Opt>
 class kjson_impl {
@@ -88,8 +97,9 @@ class kjson_impl {
 		return r.b->opt.some(std::move(r));
 	}
 
+protected:
 	std::shared_ptr<detail::base0<Opt>> b;
-	const ::kjson_value *const v;
+	const ::kjson_value *v;
 
 	kjson_impl(std::shared_ptr<detail::base0<Opt>> b,
 	           const kjson_value *v)
@@ -115,6 +125,13 @@ public:
 		return parse(ss.str(), opt);
 	}
 
+	static opt_t<kjson_impl<Opt>> parse(std::istream &&i, Opt opt = {})
+	{
+		std::stringstream ss;
+		ss << i.rdbuf();
+		return parse(ss.str(), opt);
+	}
+
 	opt_t<size_t> count(std::string_view sv) const
 	{
 		if (v->type != KJSON_VALUE_OBJECT)
@@ -126,6 +143,18 @@ public:
 			            sv.length()))
 				r++;
 		return b->opt.some(r);
+	}
+
+	opt_t<bool> contains(std::string_view sv) const
+	{
+		if (v->type != KJSON_VALUE_OBJECT)
+			return b->opt.template none<bool>();
+		for (size_t i=0; i < v->o.n; i++)
+			if (sv.length() == v->o.data[i].key.len &&
+			    !memcmp(sv.data(), v->o.data[i].key.begin,
+			            sv.length()))
+				return b->opt.some(true);
+		return b->opt.some(false);
 	}
 
 	opt_t<std::vector<kjson_impl<Opt>>> get(std::string_view sv) const
@@ -157,7 +186,7 @@ public:
 		return b->opt.template none<kjson_impl<Opt>>();
 	}
 
-	opt_t<size_t> count() const
+	opt_t<size_t> size() const
 	{
 		if (v->type != KJSON_VALUE_ARRAY)
 			return b->opt.template none<size_t>();
@@ -172,6 +201,23 @@ public:
 			return b->opt.template none<kjson_impl<Opt>>();
 		return b->opt.some(kjson_impl<Opt> { b, &v->a.data[i] });
 	}
+
+	opt_t<detail::arr_itr<Opt>> begin() const
+	{
+		if (v->type != KJSON_VALUE_ARRAY)
+			return b->opt.template none<detail::arr_itr<Opt>>();
+		return b->opt.some(detail::arr_itr<Opt> { b, &v->a.data[0] });
+	}
+
+	opt_t<detail::arr_itr<Opt>> end() const
+	{
+		if (v->type != KJSON_VALUE_ARRAY)
+			return b->opt.template none<detail::arr_itr<Opt>>();
+		return b->opt.some(detail::arr_itr<Opt> { b, &v->a.data[v->a.n] });
+	}
+
+	friend auto begin(const kjson_impl &a) { return a.begin(); }
+	friend auto end  (const kjson_impl &a) { return a.end(); }
 
 	opt_t<std::string_view> get_string() const
 	{
@@ -200,7 +246,88 @@ public:
 			return b->opt.template none<std::nullptr_t>();
 		return b->opt.some(nullptr);
 	}
+
+	friend opt_t<bool> operator==(const kjson_impl &a,
+	                              const std::string_view &b)
+	{
+		if (a.v->type != KJSON_VALUE_STRING)
+			return a.b->opt.template none<bool>();
+		return a.b->opt.some(std::string_view { a.v->s.begin, a.v->s.len } == b);
+	}
+
+	friend opt_t<bool> operator==(const std::string_view &a,
+	                              const kjson_impl &b)
+	{
+		return b == a;
+	}
+
+	friend std::ostream & operator<<(std::ostream &os, const kjson_impl &b)
+	{
+		char *buffer = NULL;
+		size_t size = 0;
+		::FILE *f = open_memstream(&buffer, &size);
+		kjson_value_print(f, b.v);
+		size_t n = ftell(f);
+		fclose(f);
+		os.write(buffer, n);
+		free(buffer);
+		return os;
+	}
+
+	template <typename T>
+	std::enable_if_t<requests_string<T>::value,opt_t<T>> get() const
+	{
+		if (v->type == KJSON_VALUE_STRING)
+			return b->opt.some(T(std::string_view { v->s.begin, v->s.len }));
+		return b->opt.template none<T>();
+	}
+
+	template <typename T>
+	std::enable_if_t<requests_number<T>::value,opt_t<T>> get() const
+	{
+		if (v->type == NUMERIC) {
+			using std::from_chars;
+			T r;
+			const char *end = v->s.begin + v->s.len;
+			if (auto [p,ec] = from_chars(v->s.begin, end, r);
+			    ec != std::errc() || p != end)
+				return b->opt.template none<T>();
+			return b->opt.some(std::move(r));
+		}
+		return b->opt.template none<T>();
+	}
 };
+
+namespace detail {
+template <typename Opt>
+class arr_itr : kjson_impl<Opt> {
+
+	using kjson_impl<Opt>::kjson_impl;
+	friend class kjson_impl<Opt>;
+
+public:
+	arr_itr & operator++() { ++this->v; return *this; }
+	arr_itr & operator--() { --this->v; return *this; }
+
+	friend ptrdiff_t operator-(const arr_itr &a, const arr_itr &b)
+	{
+		return a.v - b.v;
+	}
+
+	const kjson_impl<Opt> & operator*() const { return *this; }
+	const kjson_impl<Opt> * operator->() const { return this; }
+
+	friend bool operator==(const arr_itr &a, const arr_itr &b)
+	{
+		return a.b == b.b && a.v == b.v;
+	}
+
+	friend bool operator!=(const arr_itr &a, const arr_itr &b)
+	{
+		return !(a == b);
+	}
+};
+}
 
 namespace detail {
 template <template <typename> typename O>
@@ -217,11 +344,19 @@ struct opt_throw {
 	template <typename R> R    none() { throw std::bad_optional_access {}; }
 	template <typename R> auto some(R &&v) { return std::forward<R>(v); }
 };
+
+
 } // end ns detail
 
 typedef kjson_impl<detail::opt_ctor<std::optional>> json_opt;
 typedef kjson_impl<detail::opt_throw> json;
 
+}
+
+namespace std {
+template <typename Opt>
+struct iterator_traits<kjson::detail::arr_itr<Opt>>
+: iterator_traits<const ::kjson_value *> {};
 }
 
 #endif
