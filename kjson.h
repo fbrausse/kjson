@@ -144,6 +144,8 @@ struct kjson_value {
 	};
 };
 
+#define KJSON_VALUE_INIT	{ KJSON_VALUE_NULL, {} }
+
 struct kjson_object_entry {
 	struct kjson_string key;
 	struct kjson_value value;

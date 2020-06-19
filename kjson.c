@@ -623,7 +623,7 @@ bool kjson_parse2(struct kjson_parser *p, struct kjson_value *v,
 	};
 	cb.stack[0] = (struct elem){ .v = v, };
 	bool r = kjson_parse_mid(p, &cb.parent);
-	assert(cb.stack_sz == 1);
+	assert(!r || cb.stack_sz == 1);
 	free(cb.stack);
 	return r;
 }
