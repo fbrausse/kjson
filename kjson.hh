@@ -78,6 +78,21 @@
  *   mpz_class g = v["key1"][2].get<mpz_class>();
  *
  * would set g to -17.
+ *
+ * Both, kjson::kjson and kjson::kjson_opt, at the moment use std::shared_ptr in
+ * order to manage the "reference semantics" view that the C library kjson
+ * assumes: the string given to kjson_parse() is assumed to exist while the
+ * resulting kjson_value is used.  As an assumption, this works well in C,
+ * however in the "ease of use" scenario in C++ this means we need to keep
+ * around a copy of the string while any kjson::kjson{,_opt} instance is still
+ * alive and we need to destroy the string afterwards as well as cleanup kjson
+ * via kjson_value_fini().  It is important to note that "the string" could be
+ * a (mutable) char * or a std::string, that is, its destructor has to be
+ * called.  The alternative "copy the string" approach does not work with kjson,
+ * as kjson_value-s point into the string that was originally parsed.  That is
+ * the whole point of the C implementation.  Thus, here is a clear clash between
+ * the views from C and from C++ and the most portable solution was by using the
+ * heap and reference-count the parsed string object.
  */
 
 #ifndef JSON_CC_HH
