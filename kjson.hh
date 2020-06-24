@@ -1,3 +1,84 @@
+/*
+ * kjson.hh
+ *
+ * Copyright 2019-2020 Franz Brauße <brausse@informatik.uni-trier.de>
+ *
+ * This file is part of kjson.
+ * See the LICENSE file for terms of distribution.
+ */
+
+/*
+ * C++ wrapper around kjson, offering a simple-to-use interface via the class
+ * kjson::kjson and another one that can be used without exceptions or RTTI
+ * called kjson::kjson_opt.  The latter uses std::optional to either represent
+ * the requested value or nothing in case of an error.  kjson::kjson has the
+ * advantage that usage is easier, e.g.
+ *
+ *   using kjson::kjson;
+ *   kjson v = kjson::parse(std::cin);
+ *   std::cout << v["key1"][1]["key2"].get<std::string_view>() << "\n";
+ *
+ * would print "42\n" for this JSON document:
+ *
+ *   { "key1": [ 23.4, { "key2": "42" }, -17 ] }
+ *
+ * kjson inherently is read-only, that is, it only provides read access to JSON
+ * values.  This C++ wrapper does not interpret numeric strings in JSON
+ * documents, just checks them for syntax and provides access to the string
+ * representation via .get_number_rep().  For the example document above,
+ *
+ *   v["key1"][0].get_number_rep()
+ *
+ * would return a std::string_view containing "23.4".  In order to make access
+ * easier, a .get<T>() function is provided, which uses the type traits
+ *
+ *   kjson::requests_string<S>
+ *
+ * and
+ *
+ *   kjson::requests_number<T>
+ *
+ * in order to ensure that the JSON node has the correct type when .get<T>() is
+ * called on it.  Both default to std::false_type, however, the first one is
+ * specialized to std::true_type for std::string and std::string_view, while for
+ * the second one no specialization exists.  The reason is that all number types
+ * built into C++ are not able to represent JSON numeric strings accurately.
+ * E.g., 23.4 has no finite binary floating point representation and even
+ * integers exceeding 64 bit have no standard C++ type, both however are
+ * absolutely valid JSON values.
+ *
+ * Therefore std::requests_number<T> is a specialization point for user code.
+ * If its ::value member is true, kjson invokes from_chars(start, end, T &x)
+ * using argument-dependent lookup (and importing std::from_chars) and assumes
+ * its signature follows that of std::from_chars, that is, it returns something
+ * assignable to "auto [ec,p]" where ec is an std::errc error-code and p is a
+ * pointer to the end of parsing.  If either ec != std::errc() or p != end,
+ * parsing is assumed to have failed, otherwise x is returned by .get<T>().
+ *
+ * An example to parse the above 23.4 as a float using std::from_chars would be:
+ *
+ *   namespace kjson {
+ *     template <> struct requests_number<float> : std::true_type {};
+ *   }
+ *   float f = v["key1"][0].get<float>();
+ *
+ * This specialization point can be used for arbitrary user-defined types, e.g.
+ * kay::Z (from the 'kay' library) or mpz_class from GMP's C++ wrapper, in the
+ * same way:
+ *
+ *   namespace kjson {
+ *     template <> struct requests_number<mpz_class> : std::true_type {};
+ *   }
+ *   auto from_chars(const char *start, const char *end, mpz_class &x)
+ *   {
+ *      // GMP API doesn't know about std::string_view, so wrap the string
+ *      x.set_str(std::string(start, end).c_str(), 10);
+ *      return std::pair { std::errc(), end };
+ *   }
+ *   mpz_class g = v["key1"][2].get<mpz_class>();
+ *
+ * would set g to -17.
+ */
 
 #ifndef JSON_CC_HH
 #define JSON_CC_HH
