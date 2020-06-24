@@ -48,6 +48,34 @@ template <> struct requests_string<std::string_view> : std::true_type {};
 
 template <typename T> struct requests_number : std::false_type {};
 
+enum class error : int {
+	PARSE_JSON = 1,
+	NOT_NULL,
+	NOT_A_BOOLEAN,
+	NOT_A_NUMBER,
+	NOT_A_STRING,
+	NOT_A_LIST,
+	NOT_AN_OBJECT,
+	KEY_NOT_UNIQUE,
+	KEY_NOT_FOUND,
+	INDEX_OUT_OF_BOUNDS,
+	PARSE_NUMBER,
+};
+
+static const char *const error_messages[] = {
+	nullptr,
+	"JSON parse error",
+	"not null",
+	"not a boolean",
+	"not a number",
+	"not a list",
+	"not an object",
+	"key not unique",
+	"key not found",
+	"index out of bounds",
+	"number parse error",
+};
+
 template <typename Opt>
 class kjson_impl {
 
@@ -83,7 +111,7 @@ class kjson_impl {
 		::kjson_parser p { ptr->data() };
 		::kjson_value *v = ptr.get();
 		if (!kjson_parse2(&p, v, read_other, store_leaf))
-			return Opt::template none<kjson_impl<Opt>>();
+			return Opt::template none<kjson_impl<Opt>>(error::PARSE_JSON);
 		return Opt::some(kjson_impl<Opt> { std::move(ptr), v });
 	}
 
@@ -125,7 +153,7 @@ public:
 	opt_t<size_t> count(std::string_view sv) const
 	{
 		if (v->type != KJSON_VALUE_OBJECT)
-			return Opt::template none<size_t>();
+			return Opt::template none<size_t>(error::NOT_AN_OBJECT);
 		size_t r = 0;
 		for (size_t i=0; i < v->o.n; i++)
 			if (sv.length() == v->o.data[i].key.len &&
@@ -138,7 +166,7 @@ public:
 	opt_t<bool> contains(std::string_view sv) const
 	{
 		if (v->type != KJSON_VALUE_OBJECT)
-			return Opt::template none<bool>();
+			return Opt::template none<bool>(error::NOT_AN_OBJECT);
 		for (size_t i=0; i < v->o.n; i++)
 			if (sv.length() == v->o.data[i].key.len &&
 			    !memcmp(sv.data(), v->o.data[i].key.begin,
@@ -150,7 +178,9 @@ public:
 	opt_t<std::vector<kjson_impl<Opt>>> get(std::string_view sv) const
 	{
 		if (v->type != KJSON_VALUE_OBJECT)
-			return Opt::template none<std::vector<kjson_impl<Opt>>>();
+			return Opt::template none<std::vector<kjson_impl<Opt>>>(
+				error::NOT_AN_OBJECT
+			);
 		std::vector<kjson_impl<Opt>> r;
 		for (size_t i=0; i < v->o.n; i++)
 			if (sv.length() == v->o.data[i].key.len &&
@@ -162,47 +192,47 @@ public:
 	opt_t<kjson_impl<Opt>>  operator[](std::string_view sv) const
 	{
 		if (v->type != KJSON_VALUE_OBJECT)
-			return Opt::template none<kjson_impl<Opt>>();
+			return Opt::template none<kjson_impl<Opt>>(error::NOT_AN_OBJECT);
 		::kjson_value *found = nullptr;
 		for (size_t i=0; i < v->o.n; i++)
 			if (sv.length() == v->o.data[i].key.len &&
 			    !memcmp(sv.data(), v->o.data[i].key.begin, sv.length())) {
 				if (found)
-					return Opt::template none<kjson_impl<Opt>>();
+					return Opt::template none<kjson_impl<Opt>>(error::KEY_NOT_UNIQUE);
 				found = &v->o.data[i].value;
 			}
 		if (found)
 			return Opt::some(kjson_impl<Opt> { b, found });
-		return Opt::template none<kjson_impl<Opt>>();
+		return Opt::template none<kjson_impl<Opt>>(error::KEY_NOT_FOUND);
 	}
 
 	opt_t<size_t> size() const
 	{
 		if (v->type != KJSON_VALUE_ARRAY)
-			return Opt::template none<size_t>();
+			return Opt::template none<size_t>(error::NOT_A_LIST);
 		return Opt::some(v->a.n);
 	}
 
 	opt_t<kjson_impl<Opt>> operator[](size_t i) const
 	{
 		if (v->type != KJSON_VALUE_ARRAY)
-			return Opt::template none<kjson_impl<Opt>>();
+			return Opt::template none<kjson_impl<Opt>>(error::NOT_A_LIST);
 		if (v->a.n <= i)
-			return Opt::template none<kjson_impl<Opt>>();
+			return Opt::template none<kjson_impl<Opt>>(error::INDEX_OUT_OF_BOUNDS);
 		return Opt::some(kjson_impl<Opt> { b, &v->a.data[i] });
 	}
 
 	opt_t<detail::arr_itr<Opt>> begin() const
 	{
 		if (v->type != KJSON_VALUE_ARRAY)
-			return Opt::template none<detail::arr_itr<Opt>>();
+			return Opt::template none<detail::arr_itr<Opt>>(error::NOT_A_LIST);
 		return Opt::some(detail::arr_itr<Opt> { b, &v->a.data[0] });
 	}
 
 	opt_t<detail::arr_itr<Opt>> end() const
 	{
 		if (v->type != KJSON_VALUE_ARRAY)
-			return Opt::template none<detail::arr_itr<Opt>>();
+			return Opt::template none<detail::arr_itr<Opt>>(error::NOT_A_LIST);
 		return Opt::some(detail::arr_itr<Opt> { b, &v->a.data[v->a.n] });
 	}
 
@@ -212,28 +242,28 @@ public:
 	opt_t<std::string_view> get_string() const
 	{
 		if (v->type != KJSON_VALUE_STRING)
-			return Opt::template none<std::string_view>();
+			return Opt::template none<std::string_view>(error::NOT_A_STRING);
 		return Opt::some(std::string_view { v->s.begin, v->s.len });
 	}
 
 	opt_t<std::string_view> get_number_rep() const
 	{
 		if (v->type != NUMERIC)
-			return Opt::template none<std::string_view>();
+			return Opt::template none<std::string_view>(error::NOT_A_NUMBER);
 		return Opt::some(std::string_view { v->s.begin, v->s.len });
 	}
 
 	opt_t<bool> get_bool() const
 	{
 		if (v->type != KJSON_VALUE_BOOLEAN)
-			return Opt::template none<bool>();
+			return Opt::template none<bool>(error::NOT_A_BOOLEAN);
 		return Opt::some(v->b);
 	}
 
 	opt_t<std::nullptr_t> get_null() const
 	{
 		if (v->type != KJSON_VALUE_NULL)
-			return Opt::template none<std::nullptr_t>();
+			return Opt::template none<std::nullptr_t>(error::NOT_NULL);
 		return Opt::some(nullptr);
 	}
 
@@ -278,7 +308,7 @@ public:
 			const char *end = x.data() + x.length();
 			if (auto [p,ec] = from_chars(x.data(), end, r);
 			    ec != std::errc() || p != end)
-				return Opt::template none<T>();
+				return Opt::template none<T>(error::PARSE_NUMBER);
 			return Opt::some(std::move(r));
 		});
 	}
@@ -331,7 +361,7 @@ template <template <typename> typename O>
 struct opt_ctor {
 
 	template <typename R> using type = O<R>;
-	template <typename R> O<R> static none() { return {}; }
+	template <typename R> O<R> static none(error) { return {}; }
 	template <typename R> O<R> static some(const R &v) { return { v }; }
 
 	template <typename F, typename T>
@@ -340,7 +370,7 @@ struct opt_ctor {
 		if (a)
 			return std::forward<F>(f)(std::move(*a));
 		else
-			return none<std::invoke_result_t<F,T &&>>();
+			return none<std::invoke_result_t<F,T &&>>({});
 	}
 
 	template <typename F, typename T>
@@ -349,7 +379,7 @@ struct opt_ctor {
 		if (a)
 			return std::forward<F>(f)(*a);
 		else
-			return none<std::invoke_result_t<F,const T &>>();
+			return none<std::invoke_result_t<F,const T &>>({});
 	}
 
 	template <typename F, typename T>
@@ -358,14 +388,24 @@ struct opt_ctor {
 		if (x)
 			return some(std::forward<F>(f)(std::move(*x)));
 		else
-			return none<std::invoke_result_t<F,T &&>>();
+			return none<std::invoke_result_t<F,T &&>>({});
 	}
 };
 
 struct opt_throw {
 
+	struct exception : std::runtime_error {
+
+		error code;
+
+		exception(error code)
+		: std::runtime_error(error_messages[static_cast<int>(code)])
+		, code(code)
+		{}
+	};
+
 	template <typename R> using type = R;
-	template <typename R> static R    none() { throw std::bad_optional_access {}; }
+	template <typename R> static R    none(error err) { throw exception(err); }
 	template <typename R> static auto some(R &&v) { return std::forward<R>(v); }
 
 	template <typename F, typename T>
@@ -381,10 +421,19 @@ struct opt_throw {
 	}
 };
 
-
 } // end ns detail
 
+/* "not optional": error code is ignored; however errors are quite
+ * straight-forward to diagnose. Ideally, we'd use something like
+ *   template <typename T> class either<degenerate<error,0>,T>
+ * where degenerate<V,x> "steals" the single representation x from the
+ * underlying type of V (as in ksmt::degenerate) and either<L,R> is a sum type
+ * with two constructors: left(L) and right(R), ideally specialized when L is
+ * some form of degenerate<V,x> in order to make use of this representation.
+ *
+ * However, this goes too far for kjson. :) */
 typedef kjson_impl<detail::opt_ctor<std::optional>> json_opt;
+
 typedef kjson_impl<detail::opt_throw> json;
 
 }
