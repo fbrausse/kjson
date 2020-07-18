@@ -1,6 +1,10 @@
 # tested on x86_64-pc-linux-gnu with gcc-9.1, clang-8, CompCert-3.5, tcc-0.9.27
 
-DESTDIR ?= .
+VERS = 0.1
+
+DESTDIR ?= /usr/local
+LIBDIR ?= $(DESTDIR)/lib
+INCLUDEDIR ?= $(DESTDIR)/include
 
 LIB_OBJS = $(addprefix pic/,\
 	kjson.o \
@@ -38,30 +42,36 @@ endif
 
 DEPS = $(OBJS:.o=.d)
 
-.PHONY: all clean
+.PHONY: all install clean
 
-all: test-kjson libkjson.so
+all: libkjson.so libkjson.a
 
-pkgconfig/kjson.pc: Makefile | pkgconfig/
+install: libkjson.so libkjson.a kjson.h kjson.hh $(LIBDIR)/pkgconfig/kjson.pc | $(LIBDIR)/ $(INCLUDEDIR)/
+	install -t $(LIBDIR) -m 0644 libkjson.a
+	install -t $(LIBDIR) -m 0755 libkjson.so
+	install -t $(INCLUDEDIR) -m 0644 kjson.h kjson.hh
+
+$(LIBDIR)/pkgconfig/kjson.pc: Makefile | $(LIBDIR)/pkgconfig/
 	printf "\
 Name: kjson\\n\
-Version: 0.1\\n\
+Version: %s\\n\
 Description: A JSON parser in C\\n\
+URL: https://github.com/fbrausse/kjson\\n\
 Cflags: %s\\n\
 Libs: %s\\n\
-" "-I$(realpath $(DESTDIR))" "-L$(realpath $(DESTDIR)) -lkjson" > $@
+" "$(VERS)" "-I$(realpath $(INCLUDEDIR))" "-L$(realpath $(LIBDIR)) -lkjson" > $@
 
 ifeq ($(OS),Darwin)
 libkjson.so: override LDFLAGS += -dynamiclib \
-	-install_name $(realpath $(DESTDIR)$(libdir))/libkjson.so
+	-install_name $(realpath $(LIBDIR))/libkjson.so
 else
 libkjson.so: override LDFLAGS += -shared
 endif
 
-libkjson.so: $(LIB_OBJS) | pkgconfig/kjson.pc pic/
+libkjson.so: $(LIB_OBJS) | pic/
 	$(CC) $(LDFLAGS) -o $@ $+ $(LDLIBS)
 
-libkjson.a: $(SLIB_OBJS) | pkgconfig/kjson.pc
+libkjson.a: $(SLIB_OBJS)
 	$(RM) $@ && $(AR) rcs $@ $(SLIB_OBJS)
 
 $(LIB_OBJS): pic/%.o: %.c | pic/
