@@ -84,7 +84,7 @@ $(LIB_OBJS): override CFLAGS += -fPIC
 
 test-kjson: $(OBJS)
 
-$(OBJS): override CFLAGS += $(CSTD) $(DEPFLAGS) $(WARNS)
+$(OBJS) $(LIB_OBJS): override CFLAGS += $(CSTD) $(DEPFLAGS) $(WARNS)
 $(OBJS): %.o: %.c Makefile
 
 test-kjson.o: override CPPFLAGS += -D_POSIX_C_SOURCE=200809L
