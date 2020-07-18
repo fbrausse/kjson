@@ -689,6 +689,9 @@ static void kjson_value_print_composite(FILE *f, const struct kjson_value *v,
 			fprintf(f, "]");
 		}
 		break;
+	case KJSON_VALUE_N:
+		assert(0);
+		break;
 	}
 }
 
@@ -716,5 +719,8 @@ void kjson_value_fini(const struct kjson_value *v)
 			kjson_value_fini(&v->o.data[i].value);
 		free(v->o.data);
 		return;
+	case KJSON_VALUE_N:
+		assert(0);
+		break;
 	}
 }
