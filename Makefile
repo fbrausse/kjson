@@ -42,7 +42,7 @@ endif
 
 DEPS = $(OBJS:.o=.d)
 
-.PHONY: all install clean
+.PHONY: all install uninstall clean
 
 all: libkjson.so libkjson.a
 
@@ -50,6 +50,12 @@ install: libkjson.so libkjson.a kjson.h kjson.hh $(LIBDIR)/pkgconfig/kjson.pc | 
 	install -t $(LIBDIR) -m 0644 libkjson.a
 	install -t $(LIBDIR) -m 0755 libkjson.so
 	install -t $(INCLUDEDIR) -m 0644 kjson.h kjson.hh
+
+uninstall:
+	$(RM) \
+		$(addprefix $(LIBDIR)/,libkjson.a libkjson.so pkgconfig/kjson.pc) \
+		$(addprefix $(INCLUDEDIR)/,kjson.h kjson.hh) \
+
 
 $(LIBDIR)/pkgconfig/kjson.pc: Makefile | $(LIBDIR)/pkgconfig/ $(INCLUDEDIR)/
 	printf "\
