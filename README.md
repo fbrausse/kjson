@@ -1,7 +1,33 @@
 kjson
 =====
 A [JSON](http://json.org/) parser in C11, which assumes that the input string is writeable.
-It focusses on speed and portability and it provides 3 layers of API: low, mid and high.
+This is in contrast to common parser implementations, which do not modify their source.
+This choice is motivated by the author's standard use case: reading some JSON file - the
+file contents themselves need to be available in memory - either by `mmap`(3p) or by allocating
+memory and reading the file into it - and are subsequently not required in original form.
+In both cases they are writeable, thus another copy of the interpreted values is avoided
+using `kjson`'s approach.
+
+kjson-c was written by
+  (c) 2019-2020 Franz Brauße.
+
+It has started out as an educational example of idiomatic use of C11's features.
+
+Buiding and Installation
+------------------------
+Running
+```
+make install
+```
+will install `kjson` to `/usr/local`. This can be changed to
+another prefix by passing it in the `DESTDIR` variable to `make`, e.g.
+```
+make DESTDIR=$HOME install
+```
+
+Architecture & JSON particularities
+-----------------------------------
+`kjson` focusses on speed and portability and it provides 3 layers of API: low, mid and high.
 The first two layers use constant memory, while the third one requires dynamic memory linear
 in the number of array or object entries. The second layer 'mid' is a callback-based parser
 API with two versions, one of which requires constant memory independent of the depth of the
