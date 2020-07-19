@@ -257,8 +257,8 @@ int kjson_read_number(struct kjson_parser *p, union kjson_leaf_raw *leaf)
 		return -1;
 	enum kjson_leaf_type ty;
 	if (*t == '.') {
-		double frac = v + strtod(t+1, &t);
-		leaf->d = pos ? -frac : frac;
+		double frac = v + strtod(t, &t);
+		leaf->d = pos ? frac : -frac;
 		ty = KJSON_LEAF_NUMBER_DOUBLE;
 	} else if (*t == 'E' || *t == 'e') {
 		long exp = strtol(t+1, &t, 10);
