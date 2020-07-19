@@ -41,7 +41,7 @@ The source document itself is to be encoded in UTF-8, while string tokens allow 
 sequences of the form `\uXXXX` denoting **not** a *code point*, but rather a *code unit*.
 Code units are the elements UTF-16 encodes to: 16-bit integers also with some escape sequences
 called surrogate pairs. These are 2 such integers each of specific range which in sequence
-form a code unit outside the Basic Multilingual Plane (such as e.g. Emojis and many others).
+form a code point outside the Basic Multilingual Plane (such as e.g. Emojis and many others).
 For decoding into UTF-8 (which is the defacto standard nowadays and especially suited
 for the string functions from the C standard library) this means a round-trip via UTF-16 in
 order to decode JSON strings appropriately. In addition, JSON does not require an
