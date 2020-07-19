@@ -8,7 +8,7 @@ memory and reading the file into it - and are subsequently not required in origi
 In both cases they are writeable, thus another copy of the interpreted values is avoided
 using `kjson`'s approach.
 
-kjson-c was written by
+kjson was written by
   (c) 2019-2020 Franz Brauße.
 
 It has started out as an educational example of idiomatic use of C11's features.
