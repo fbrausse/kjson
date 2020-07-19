@@ -51,7 +51,7 @@ install: libkjson.so libkjson.a kjson.h kjson.hh $(LIBDIR)/pkgconfig/kjson.pc | 
 	install -t $(LIBDIR) -m 0755 libkjson.so
 	install -t $(INCLUDEDIR) -m 0644 kjson.h kjson.hh
 
-$(LIBDIR)/pkgconfig/kjson.pc: Makefile | $(LIBDIR)/pkgconfig/
+$(LIBDIR)/pkgconfig/kjson.pc: Makefile | $(LIBDIR)/pkgconfig/ $(INCLUDEDIR)/
 	printf "\
 Name: kjson\\n\
 Version: %s\\n\
