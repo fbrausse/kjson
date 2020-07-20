@@ -46,10 +46,15 @@ DEPS = $(OBJS:.o=.d)
 
 all: libkjson.so libkjson.a
 
-install: libkjson.so libkjson.a kjson.h kjson.hh $(LIBDIR)/pkgconfig/kjson.pc | $(LIBDIR)/ $(INCLUDEDIR)/
-	install -t $(LIBDIR) -m 0644 libkjson.a
-	install -t $(LIBDIR) -m 0755 libkjson.so
-	install -t $(INCLUDEDIR) -m 0644 kjson.h kjson.hh
+$(LIBDIR)/%.a: %.a | $(LIBDIR)/
+	install -t $(@D) -m 0644 $<
+$(LIBDIR)/%.so: %.so | $(LIBDIR)/
+	install -t $(@D) -m 0755 $<
+$(INCLUDEDIR)/%: % | $(INCLUDEDIR)/
+	install -t $(@D) -m 0644 $<
+
+install: $(addprefix $(LIBDIR)/,libkjson.so libkjson.a pkgconfig/kjson.pc)
+install: $(addprefix $(INCLUDEDIR)/,kjson.h kjson.hh)
 
 uninstall:
 	$(RM) \
