@@ -128,11 +128,11 @@ struct base : ::kjson_value {
 	: ::kjson_value KJSON_VALUE_INIT
 	, str(std::move(str))
 	{}
-	char * data();
+	inline char * data();
 };
 
-template <> char * base<char *>::data() { return str; }
-template <> char * base<std::string>::data() { return str.data(); }
+template <> inline char * base<char *>::data() { return str; }
+template <> inline char * base<std::string>::data() { return str.data(); }
 
 template <typename Opt> class arr_itr;
 
