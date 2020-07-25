@@ -242,16 +242,9 @@ static int kjson_parse_leaf(struct kjson_parser *p, union kjson_leaf_raw *leaf,
 		if (!kjson_read_string_utf8(p, &leaf->s.begin, &leaf->s.len))
 			return -1;
 		return KJSON_LEAF_STRING;
-	} else if (!strncmp(p->s, "null", 4)) {
-		p->s += 4;
+	} else if (kjson_read_null(p)) {
 		return KJSON_LEAF_NULL;
-	} else if (!strncmp(p->s, "true", 4)) {
-		leaf->b = true;
-		p->s += 4;
-		return KJSON_LEAF_BOOLEAN;
-	} else if (!strncmp(p->s, "false", 5)) {
-		leaf->b = false;
-		p->s += 5;
+	} else if (kjson_read_bool(p, &leaf->b)) {
 		return KJSON_LEAF_BOOLEAN;
 	} else {
 		return cb->read_other ? cb->read_other(cb, p, leaf)
