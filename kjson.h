@@ -1,3 +1,11 @@
+/*
+ * kjson.h
+ *
+ * Copyright 2019-2020 Franz Brauße <brausse@informatik.uni-trier.de>
+ *
+ * This file is part of kjson.
+ * See the LICENSE file for terms of distribution.
+ */
 
 /* Requires C11 (for anonymous struct / union members) */
 
