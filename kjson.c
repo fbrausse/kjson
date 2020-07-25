@@ -2,8 +2,8 @@
 /* Requires C11 (for anonymous struct / union members) */
 
 #include <string.h>	/* strncmp(3), strchr(3) */
-#include <stdlib.h>	/* strtod(3), malloc(3), free(3) */
-#include <inttypes.h>	/* strtoumax(3), uint_least32_t, PRIdMAX */
+#include <stdlib.h>	/* malloc(3), free(3) */
+#include <inttypes.h>	/* uint_least32_t, PRIdMAX */
 #include <errno.h>	/* errno(3) */
 #include <assert.h>	/* assert(3) */
 #include <limits.h>	/* CHAR_BIT */
@@ -34,46 +34,6 @@ bool kjson_read_bool(struct kjson_parser *p, bool *v)
 	} else
 		return false;
 	return true;
-}
-
-bool kjson_read_integer(struct kjson_parser *p, intmax_t *v)
-{
-	bool pos = true;
-	if (*p->s == '-') {
-		pos = false;
-		p->s++;
-	}
-	if (*p->s == '0') {
-		p->s++;
-		*v = 0;
-	} else {
-		char *t;
-		uintmax_t i = strtoumax(p->s, &t, 10);
-		*v = i;
-		if (!pos) {
-			if (i > INTMAX_MAX)
-				return false;
-			*v = -*v;
-		}
-		p->s = t;
-	}
-	return *p->s != '.';
-}
-
-void kjson_read_double(struct kjson_parser *p, double *v)
-{
-	bool pos = true;
-	if (*p->s == '-') {
-		pos = false;
-		p->s++;
-	}
-	if (*p->s == '0')
-		p->s++;
-	if (*p->s == '.') {
-		double d = strtod(p->s, &p->s);
-		*v = pos ? d : -d;
-	} else
-		*v = 0;
 }
 
 /* Converts the hex-string u[0..3] to a 16-bit value and stores it in *uni. */
@@ -245,40 +205,34 @@ static void skip_space(struct kjson_parser *p)
 
 int kjson_read_number(struct kjson_parser *p, union kjson_leaf_raw *leaf)
 {
-	bool pos = true;
-	if (*p->s == '-') {
-		pos = false;
+	leaf->n.integer = p->s;
+	if (*p->s == '-')
 		p->s++;
-	}
-	char *t;
-	errno = 0;
-	uintmax_t v = strtoumax(p->s, &t, 10);
-	if (t == p->s || (v == UINTMAX_MAX && errno))
-		return -1;
-	enum kjson_leaf_type ty;
-	if (*t == '.') {
-		double frac = v + strtod(t, &t);
-		leaf->d = pos ? frac : -frac;
-		ty = KJSON_LEAF_NUMBER_DOUBLE;
-	} else if (*t == 'E' || *t == 'e') {
-		long exp = strtol(t+1, &t, 10);
-		if (errno && (exp <= INT_MIN || exp >= INT_MAX))
-			return -1;
-		double d = v;
-		leaf->d = ldexp(pos ? d : -d, exp);
-		ty = KJSON_LEAF_NUMBER_DOUBLE;
+	if (*p->s == '0') {
+		p->s++;
 	} else {
-		intmax_t w = v;
-		if (!pos) {
-			if (v > INTMAX_MAX)
-				return -1;
-			w = -w;
-		}
-		leaf->i = w;
-		ty = KJSON_LEAF_NUMBER_INTEGER;
+		if (*p->s < '1' || *p->s > '9')
+			return -1;
+		do p->s++; while ('0' <= *p->s && *p->s <= '9');
 	}
-	p->s = t;
-	return ty;
+	leaf->n.fractional = p->s;
+	if (*p->s == '.') {
+		p->s++;
+		if (!('0' <= *p->s && *p->s <= '9'))
+			return -1;
+		do p->s++; while ('0' <= *p->s && *p->s <= '9');
+	}
+	leaf->n.exponent = p->s;
+	if (*p->s == 'E' || *p->s == 'e') {
+		p->s++;
+		if (*p->s == '+' || *p->s == '-')
+			p->s++;
+		if (!('0' <= *p->s && *p->s <= '9'))
+			return -1;
+		do p->s++; while ('0' <= *p->s && *p->s <= '9');
+	}
+	leaf->n.end = p->s;
+	return KJSON_LEAF_NUMBER;
 }
 
 static int kjson_parse_leaf(struct kjson_parser *p, union kjson_leaf_raw *leaf,
@@ -525,13 +479,9 @@ static void high_leaf(const struct kjson_mid_cb *c, enum kjson_leaf_type type,
 		v->type = KJSON_VALUE_BOOLEAN;
 		v->b = l->b;
 		break;
-	case KJSON_LEAF_NUMBER_INTEGER:
-		v->type = KJSON_VALUE_NUMBER_INTEGER;
-		v->i = l->i;
-		break;
-	case KJSON_LEAF_NUMBER_DOUBLE:
-		v->type = KJSON_VALUE_NUMBER_DOUBLE;
-		v->d = l->d;
+	case KJSON_LEAF_NUMBER:
+		v->type = KJSON_VALUE_NUMBER;
+		v->n = l->n;
 		break;
 	case KJSON_LEAF_STRING:
 		v->type = KJSON_VALUE_STRING;
@@ -638,11 +588,9 @@ static void kjson_value_print_composite(FILE *f, const struct kjson_value *v,
 	case KJSON_VALUE_BOOLEAN:
 		fprintf(f, "%s", v->b ? "true" : "false");
 		break;
-	case KJSON_VALUE_NUMBER_INTEGER:
-		fprintf(f, "%" PRIdMAX, v->i);
-		break;
-	case KJSON_VALUE_NUMBER_DOUBLE:
-		fprintf(f, "%f", v->d);
+	case KJSON_VALUE_NUMBER:
+		fprintf(f, "%.*s", (int)(v->n.end - v->n.integer),
+		        v->n.integer);
 		break;
 	case KJSON_VALUE_STRING:
 		fputc('"', f);
@@ -703,8 +651,7 @@ void kjson_value_fini(const struct kjson_value *v)
 	switch (v->type) {
 	case KJSON_VALUE_NULL:
 	case KJSON_VALUE_BOOLEAN:
-	case KJSON_VALUE_NUMBER_INTEGER:
-	case KJSON_VALUE_NUMBER_DOUBLE:
+	case KJSON_VALUE_NUMBER:
 	case KJSON_VALUE_STRING:
 		return;
 	case KJSON_VALUE_ARRAY:

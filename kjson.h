@@ -19,8 +19,7 @@ struct kjson_parser {
 enum kjson_value_type {
 	KJSON_VALUE_NULL,
 	KJSON_VALUE_BOOLEAN,
-	KJSON_VALUE_NUMBER_INTEGER,
-	KJSON_VALUE_NUMBER_DOUBLE,
+	KJSON_VALUE_NUMBER,
 	KJSON_VALUE_STRING,
 	KJSON_VALUE_ARRAY,
 	KJSON_VALUE_OBJECT,
@@ -38,8 +37,6 @@ struct kjson_string {
 
 bool kjson_read_bool(struct kjson_parser *p, bool *v);
 bool kjson_read_null(struct kjson_parser *p);
-bool kjson_read_integer(struct kjson_parser *p, intmax_t *v);
-void kjson_read_double(struct kjson_parser *p, double *v);
 
 /* Parses a JSON string entry into a '\0'-terminated UTF-8 string at *begin,
  * decoding any escaped characters (including surrogate pairs). len is optional
@@ -49,10 +46,16 @@ void kjson_read_double(struct kjson_parser *p, double *v);
  */
 bool kjson_read_string_utf8(struct kjson_parser *p, char **begin, size_t *len);
 
+struct kjson_number {
+	char *integer;
+	char *fractional;
+	char *exponent;
+	char *end;
+};
+
 union kjson_leaf_raw {
 	bool b;
-	intmax_t i;
-	double d;
+	struct kjson_number n;
 	struct kjson_string s;
 };
 
@@ -63,11 +66,10 @@ int kjson_read_number(struct kjson_parser *p, union kjson_leaf_raw *leaf);
  * -------------------------------------------------------------------------- */
 
 enum kjson_leaf_type {
-	KJSON_LEAF_NULL           = KJSON_VALUE_NULL,
-	KJSON_LEAF_BOOLEAN        = KJSON_VALUE_BOOLEAN,
-	KJSON_LEAF_NUMBER_INTEGER = KJSON_VALUE_NUMBER_INTEGER,
-	KJSON_LEAF_NUMBER_DOUBLE  = KJSON_VALUE_NUMBER_DOUBLE,
-	KJSON_LEAF_STRING         = KJSON_VALUE_STRING,
+	KJSON_LEAF_NULL    = KJSON_VALUE_NULL,
+	KJSON_LEAF_BOOLEAN = KJSON_VALUE_BOOLEAN,
+	KJSON_LEAF_NUMBER  = KJSON_VALUE_NUMBER,
+	KJSON_LEAF_STRING  = KJSON_VALUE_STRING,
 	KJSON_LEAF_N
 };
 
@@ -136,8 +138,7 @@ struct kjson_value {
 	enum kjson_value_type type;
 	union {
 		bool b;
-		intmax_t i;
-		double d;
+		struct kjson_number n;
 		struct kjson_string s;
 		struct kjson_array a;
 		struct kjson_object o;

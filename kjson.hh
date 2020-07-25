@@ -177,36 +177,13 @@ class kjson_impl {
 
 	template <typename R> using opt_t = typename Opt::template type<R>;
 
-	static constexpr int NUMERIC = KJSON_VALUE_N;
-
-	static int read_other(const struct kjson_mid_cb *,
-	                      struct kjson_parser *p, union kjson_leaf_raw *l)
-	{
-		std::match_results<const char *> m;
-		if (!regex_search(p->s, m, detail::NUM_REGEX))
-			return -1;
-		l->s.begin = p->s;
-		l->s.len = m.length();
-		p->s += m.length();
-		return NUMERIC;
-	}
-
-	static void store_leaf(struct kjson_value *v,
-	                       enum kjson_leaf_type type,
-	                       union kjson_leaf_raw *l)
-	{
-		assert(type == NUMERIC);
-		v->type = (enum kjson_value_type)NUMERIC;
-		v->s = l->s;
-	}
-
 	template <typename T>
 	static opt_t<kjson_impl<Opt>> parse(
 		std::shared_ptr<detail::base<T>> ptr
 	) {
 		::kjson_parser p { ptr->data() };
 		::kjson_value *v = ptr.get();
-		if (!kjson_parse2(&p, v, read_other, store_leaf))
+		if (!kjson_parse(&p, v))
 			return Opt::template none<kjson_impl<Opt>>(error::PARSE_JSON);
 		return Opt::some(kjson_impl<Opt> { std::move(ptr), v });
 	}
@@ -344,9 +321,12 @@ public:
 
 	opt_t<std::string_view> get_number_rep() const
 	{
-		if (v->type != NUMERIC)
+		if (v->type != KJSON_VALUE_NUMBER)
 			return Opt::template none<std::string_view>(error::NOT_A_NUMBER);
-		return Opt::some(std::string_view { v->s.begin, v->s.len });
+		return Opt::some(std::string_view {
+			v->n.integer,
+			(size_t)(v->n.end - v->n.integer)
+		});
 	}
 
 	opt_t<bool> get_bool() const
