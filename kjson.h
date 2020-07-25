@@ -12,6 +12,13 @@
 extern "C" {
 #endif
 
+#define KJSON_VERSION_SPLIT(major,minor,patch) \
+	((major) << 16 | (minor) << 8 | (patch) << 0)
+
+#define KJSON_VERSION	KJSON_VERSION_SPLIT(0,2,0)
+
+uint32_t kjson_version(void);
+
 struct kjson_parser {
 	char *s;
 };
