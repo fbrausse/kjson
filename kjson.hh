@@ -164,6 +164,7 @@ static const char *const error_messages[] = {
 	"not null",
 	"not a boolean",
 	"not a number",
+	"not a string",
 	"not a list",
 	"not an object",
 	"key not unique",
