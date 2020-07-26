@@ -17,8 +17,7 @@ static void dbg_leaf(const struct kjson_mid_cb *c, enum kjson_leaf_type type,
 	switch (type) {
 	case KJSON_LEAF_NULL: printf("null\n"); break;
 	case KJSON_LEAF_BOOLEAN: printf("%s\n", l->b ? "true" : "false"); break;
-	case KJSON_LEAF_NUMBER_INTEGER: printf("%" PRIdMAX "\n", l->i); break;
-	case KJSON_LEAF_NUMBER_DOUBLE: printf("%f\n", l->d); break;
+	case KJSON_LEAF_NUMBER: printf("%.*s\n", (int)(l->n.end - l->n.integer), l->n.integer); break;
 	case KJSON_LEAF_STRING:
 		printf("\"%.*s\"\n", (int)l->s.len, l->s.begin);
 		break;
