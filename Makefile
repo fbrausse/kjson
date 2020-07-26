@@ -1,6 +1,8 @@
 # tested on x86_64-pc-linux-gnu with gcc-9.1, clang-8, CompCert-3.5, tcc-0.9.27
 
-VERS = 0.1
+VERS = 0.2.0
+SOVERS = 1 # version in SONAME
+SONAME = libkjson.so.$(SOVERS)
 
 DESTDIR ?= /usr/local
 LIBDIR ?= $(DESTDIR)/lib
@@ -42,13 +44,17 @@ endif
 
 DEPS = $(OBJS:.o=.d)
 
-.PHONY: all install uninstall clean
+.PHONY: all install install-static install-dynamic uninstall clean
 
-all: libkjson.so libkjson.a
+all: libkjson.so.$(VERS) libkjson.a
 
 $(LIBDIR)/%.a: %.a | $(LIBDIR)/
 	install -t $(@D) -m 0644 $<
-$(LIBDIR)/%.so: %.so | $(LIBDIR)/
+$(LIBDIR)/$(SONAME): $(LIBDIR)/libkjson.so.$(VERS) | $(LIBDIR)/
+	ldconfig -v -n -l $<
+$(LIBDIR)/libkjson.so: $(LIBDIR)/$(SONAME)
+	ln -s $(SONAME) $@
+$(LIBDIR)/%: % | $(LIBDIR)/
 	install -t $(@D) -m 0755 $<
 $(INCLUDEDIR)/%: % | $(INCLUDEDIR)/
 	install -t $(@D) -m 0644 $<
@@ -58,7 +64,7 @@ install: $(addprefix $(INCLUDEDIR)/,kjson.h kjson.hh)
 
 uninstall:
 	$(RM) \
-		$(addprefix $(LIBDIR)/,libkjson.a libkjson.so pkgconfig/kjson.pc) \
+		$(addprefix $(LIBDIR)/,libkjson.a libkjson.so $(SONAME) libkjson.so.$(VERS) pkgconfig/kjson.pc) \
 		$(addprefix $(INCLUDEDIR)/,kjson.h kjson.hh) \
 
 
@@ -73,13 +79,13 @@ Libs: %s\\n\
 " "$(VERS)" "-I$(realpath $(INCLUDEDIR))" "-L$(realpath $(LIBDIR)) -lkjson" > $@
 
 ifeq ($(OS),Darwin)
-libkjson.so: override LDFLAGS += -dynamiclib \
-	-install_name $(realpath $(LIBDIR))/libkjson.so
+libkjson.so.$(VERS): override LDFLAGS += -dynamiclib \
+	-install_name $(realpath $(LIBDIR))/$(SONAME)
 else
-libkjson.so: override LDFLAGS += -shared
+libkjson.so.$(VERS): override LDFLAGS += -shared -Wl,-soname,$(SONAME)
 endif
 
-libkjson.so: $(LIB_OBJS) | pic/
+libkjson.so.$(VERS): $(LIB_OBJS) | pic/
 	$(CC) $(LDFLAGS) -o $@ $+ $(LDLIBS)
 
 libkjson.a: $(SLIB_OBJS)
