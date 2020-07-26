@@ -1,6 +1,6 @@
-# tested on x86_64-pc-linux-gnu with gcc-9.1, clang-8, CompCert-3.5, tcc-0.9.27
+# tested on x86_64-pc-linux-gnu with gcc-9.1, gcc-10.2, clang-8, clang-10, CompCert-3.5, tcc-0.9.27
 
-VERS = 0.2.0
+VERS = 0.2.1
 SOVERS = 1 # version in SONAME
 SONAME = libkjson.so.$(SOVERS)
 
