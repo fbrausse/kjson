@@ -2,5 +2,5 @@
 *.d
 /test-kjson
 /pkgconfig/kjson.pc
-/libkjson.so
+/libkjson.so*
 /libkjson.a
