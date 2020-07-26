@@ -103,8 +103,8 @@
 #include <cstring>	/* memcmp */
 #include <cassert>
 #include <optional>
-#include <regex>
 #include <iostream>
+#include <sstream>
 #include <memory>
 #include <charconv>	/* from_chars() */
 
@@ -113,13 +113,6 @@
 namespace kjson {
 
 namespace detail {
-
-static const std::regex NUM_REGEX {"^"
-	/* number ::= integer fraction exponent */
-	"-?([0-9]|[1-9][0-9]+)" /* integer ::= '-'_opt (digit | onenine digits) */
-	"(\\.[0-9]+)?"          /* fraction ::= '' | ('.' digits) */
-	"([eE][+-]?[0-9]+)?"    /* exponent ::= '' | ([eE] sign digits) */
-, std::regex_constants::extended };
 
 template <typename T>
 struct base : ::kjson_value {
