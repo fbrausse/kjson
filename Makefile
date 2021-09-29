@@ -2,6 +2,9 @@
 
 VERS = 0.1
 
+INSTALL = install
+LDCONFIG = /sbin/ldconfig
+
 DESTDIR ?= /usr/local
 LIBDIR ?= $(DESTDIR)/lib
 INCLUDEDIR ?= $(DESTDIR)/include
